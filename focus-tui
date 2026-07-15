@@ -1,0 +1,481 @@
+#!/usr/bin/env -S uv run --script
+# /// script
+# requires-python = ">=3.10"
+# dependencies = ["textual>=0.80"]
+# ///
+"""
+focus-tui — a full-screen terminal UI for the `focus` site blocker.
+
+Live toggle list of the sites you want to stay away from. Each site can be
+individually blocked (●) or allowed (○); toggling flips it in /etc/hosts
+immediately so it takes effect in every browser.
+
+File-compatible with the plain `focus` bash script:
+  - roster lives in ~/.focus-sites (one domain per line)
+  - blocks live in /etc/hosts between the "# >>> focus block >>>" markers
+
+Editing /etc/hosts needs sudo. We authenticate once up front (a normal
+password prompt, before the UI opens), then reuse the cached credential.
+
+Keys:  space toggle · a add · d delete · o block all · f allow all · r refresh · q quit
+"""
+
+from __future__ import annotations
+
+import os
+import re
+import subprocess
+import sys
+import tempfile
+import time
+from pathlib import Path
+
+from textual.app import App, ComposeResult
+from textual.binding import Binding
+from textual.containers import Center, Middle
+from textual.screen import ModalScreen
+from textual.widgets import DataTable, Footer, Header, Input, Label
+
+HOSTS = Path("/etc/hosts")
+SITES_FILE = Path.home() / ".focus-sites"
+MARK_START = "# >>> focus block >>>"
+MARK_END = "# <<< focus block <<<"
+REDIRECT = "127.0.0.1"
+LOCK_FILE = Path("/Library/Application Support/focus/lock")
+FOCUS_BIN = Path(__file__).resolve().parent / "focus"
+
+
+# --------------------------------------------------------------------------
+# Pure helpers (no sudo) — parsing and normalizing
+# --------------------------------------------------------------------------
+
+def normalize(raw: str) -> str:
+    """Strip protocol, path and leading www. -> bare lowercase domain."""
+    s = raw.strip().lower()
+    s = re.sub(r"^https?://", "", s)
+    s = s.split("/", 1)[0]
+    s = re.sub(r"^www\.", "", s)
+    return s
+
+
+def read_roster() -> list[str]:
+    """Sites on the user's list (ordered, de-duplicated, blanks dropped)."""
+    if not SITES_FILE.exists():
+        return []
+    seen: dict[str, None] = {}
+    for line in SITES_FILE.read_text().splitlines():
+        site = line.strip()
+        if site:
+            seen.setdefault(site, None)
+    return list(seen)
+
+
+def write_roster(sites: list[str]) -> None:
+    SITES_FILE.write_text("".join(f"{s}\n" for s in sites))
+
+
+def read_active() -> set[str]:
+    """Domains currently blocked in the managed /etc/hosts region."""
+    if not HOSTS.exists():
+        return set()
+    active: set[str] = set()
+    inside = False
+    for line in HOSTS.read_text().splitlines():
+        if line.strip() == MARK_START:
+            inside = True
+            continue
+        if line.strip() == MARK_END:
+            inside = False
+            continue
+        if inside:
+            parts = line.split()
+            if len(parts) >= 2:
+                active.add(re.sub(r"^www\.", "", parts[1].lower()))
+    return active
+
+
+def build_hosts_text(active: set[str]) -> str:
+    """Return new /etc/hosts contents: everything outside the markers, plus a
+    freshly rebuilt managed block for the active set."""
+    original = HOSTS.read_text() if HOSTS.exists() else ""
+    kept: list[str] = []
+    inside = False
+    for line in original.splitlines():
+        if line.strip() == MARK_START:
+            inside = True
+            continue
+        if line.strip() == MARK_END:
+            inside = False
+            continue
+        if not inside:
+            kept.append(line)
+
+    text = "\n".join(kept).rstrip("\n")
+    if active:
+        block = [MARK_START]
+        for site in sorted(active):
+            block.append(f"{REDIRECT} {site}")
+            block.append(f"{REDIRECT} www.{site}")
+        block.append(MARK_END)
+        text = (text + "\n" if text else "") + "\n".join(block)
+    return text + "\n"
+
+
+# --------------------------------------------------------------------------
+# Lock state (set by `focus lock`; enforced by the root daemon)
+# --------------------------------------------------------------------------
+
+def lock_until() -> int:
+    """Epoch second the current lock expires, or 0 if not locked."""
+    try:
+        first = LOCK_FILE.read_text().splitlines()[0].strip()
+        return int(first)
+    except Exception:
+        return 0
+
+
+def lock_remaining() -> int:
+    return max(0, lock_until() - int(time.time()))
+
+
+def fmt_remaining(secs: int) -> str:
+    return f"{secs // 3600}h {(secs % 3600) // 60:02d}m"
+
+
+# --------------------------------------------------------------------------
+# sudo plumbing
+# --------------------------------------------------------------------------
+
+def sudo_alive() -> bool:
+    return subprocess.run(
+        ["sudo", "-n", "true"], capture_output=True
+    ).returncode == 0
+
+
+def write_hosts_with_sudo(active: set[str]) -> None:
+    """Atomically replace /etc/hosts and flush DNS. Requires a live sudo
+    credential (call sudo_alive() / re-auth first)."""
+    text = build_hosts_text(active)
+    with tempfile.NamedTemporaryFile("w", delete=False) as tf:
+        tf.write(text)
+        tmp = tf.name
+    try:
+        subprocess.run(["sudo", "-n", "cp", tmp, str(HOSTS)], check=True)
+        subprocess.run(
+            ["sudo", "-n", "dscacheutil", "-flushcache"],
+            capture_output=True,
+        )
+        subprocess.run(
+            ["sudo", "-n", "killall", "-HUP", "mDNSResponder"],
+            capture_output=True,
+        )
+    finally:
+        os.unlink(tmp)
+
+
+# --------------------------------------------------------------------------
+# Add-site modal
+# --------------------------------------------------------------------------
+
+class AddSite(ModalScreen[str | None]):
+    """A small centered input for adding a domain."""
+
+    BINDINGS = [Binding("escape", "cancel", "Cancel")]
+
+    def compose(self) -> ComposeResult:
+        with Middle():
+            with Center():
+                yield Label("Add a site to block", id="add-title")
+            with Center():
+                yield Input(
+                    placeholder="instagram.com",
+                    id="add-input",
+                )
+
+    def on_mount(self) -> None:
+        self.query_one(Input).focus()
+
+    def on_input_submitted(self, event: Input.Submitted) -> None:
+        value = normalize(event.value)
+        self.dismiss(value or None)
+
+    def action_cancel(self) -> None:
+        self.dismiss(None)
+
+
+class LockDuration(ModalScreen[str | None]):
+    """Prompt for a lock duration. Returns the raw string (e.g. '90m')."""
+
+    BINDINGS = [Binding("escape", "cancel", "Cancel")]
+
+    def compose(self) -> ComposeResult:
+        with Middle():
+            with Center():
+                yield Label(
+                    "Lock focus for how long?  (90m · 2h · 1h30m · 45)\n"
+                    "There is NO early unlock.",
+                    id="add-title",
+                )
+            with Center():
+                yield Input(placeholder="90m", id="add-input")
+
+    def on_mount(self) -> None:
+        self.query_one(Input).focus()
+
+    def on_input_submitted(self, event: Input.Submitted) -> None:
+        self.dismiss(event.value.strip() or None)
+
+    def action_cancel(self) -> None:
+        self.dismiss(None)
+
+
+# --------------------------------------------------------------------------
+# Main app
+# --------------------------------------------------------------------------
+
+class FocusApp(App[None]):
+    CSS = """
+    Screen { align: center top; }
+    #hint { color: $text-muted; padding: 0 1; }
+    DataTable { height: 1fr; }
+    AddSite { align: center middle; }
+    #add-title { padding: 1; }
+    #add-input { width: 40; }
+    """
+
+    BINDINGS = [
+        Binding("space", "toggle", "Toggle"),
+        Binding("a", "add", "Add"),
+        Binding("d,delete", "delete", "Delete"),
+        Binding("l", "lock", "Lock"),
+        Binding("o", "block_all", "Block all"),
+        Binding("f", "allow_all", "Allow all"),
+        Binding("r", "refresh", "Refresh"),
+        Binding("q", "quit", "Quit"),
+    ]
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.roster: list[str] = []
+        self.active: set[str] = set()
+
+    def compose(self) -> ComposeResult:
+        yield Header(show_clock=True)
+        yield Label("", id="hint")
+        table = DataTable(cursor_type="row", zebra_stripes=True)
+        table.add_column("State", key="state", width=12)
+        table.add_column("Site", key="site")
+        yield table
+        yield Footer()
+
+    def on_mount(self) -> None:
+        self.title = "focus"
+        self.load_state()
+        self.refresh_table()
+        # Tick the lock countdown once a second.
+        self.set_interval(1.0, self.tick)
+
+    @property
+    def is_locked(self) -> bool:
+        return lock_remaining() > 0
+
+    def tick(self) -> None:
+        remaining = lock_remaining()
+        self.update_status()
+        # The moment a lock expires, the daemon unblocks; reflect it.
+        if remaining == 0 and getattr(self, "_was_locked", False):
+            self.load_state()
+            self.refresh_table()
+        self._was_locked = remaining > 0
+
+    # -- state ----------------------------------------------------------
+
+    def load_state(self) -> None:
+        self.roster = read_roster()
+        self.active = read_active()
+        # A site can be active in hosts even if it drifted off the roster;
+        # keep the roster a superset so nothing active is invisible.
+        for site in self.active:
+            if site not in self.roster:
+                self.roster.append(site)
+
+    def refresh_table(self, keep_row: int | None = None) -> None:
+        table = self.query_one(DataTable)
+        if keep_row is None:
+            keep_row = table.cursor_row
+        table.clear()
+        for site in self.roster:
+            if site in self.active:
+                state = "[red]● blocked[/]"
+            else:
+                state = "[green]○ allowed[/]"
+            table.add_row(state, site, key=site)
+
+        self.update_status()
+
+        if self.roster:
+            table.move_cursor(row=max(0, min(keep_row, len(self.roster) - 1)))
+
+    def update_status(self) -> None:
+        n_blocked = len(self.active)
+        n_total = len(self.roster)
+        remaining = lock_remaining()
+        hint = self.query_one("#hint", Label)
+        if remaining > 0:
+            self.sub_title = (
+                f"🔒 LOCKED · {fmt_remaining(remaining)} left · "
+                f"{n_blocked} blocked / {n_total} total"
+            )
+            hint.update(
+                f"[b red]Locked — no early unlock.[/] "
+                f"{fmt_remaining(remaining)} remaining. "
+                "You can still [b]a[/]dd sites, not remove them."
+            )
+        else:
+            status = "ON" if n_blocked else "OFF"
+            self.sub_title = f"Focus {status} · {n_blocked} blocked / {n_total} total"
+            if n_total == 0:
+                hint.update("No sites yet — press [b]a[/] to add one, e.g. instagram.com")
+            else:
+                hint.update(
+                    "[b]space[/] toggle · [b]a[/] add · [b]d[/] delete · "
+                    "[b]l[/] lock a focus session"
+                )
+
+    def current_site(self) -> str | None:
+        table = self.query_one(DataTable)
+        if not self.roster:
+            return None
+        row = table.cursor_row
+        if 0 <= row < len(self.roster):
+            return self.roster[row]
+        return None
+
+    def apply(self) -> bool:
+        """Persist roster + push active set to /etc/hosts. Returns success."""
+        write_roster(self.roster)
+        if not sudo_alive():
+            with self.suspend():
+                print("\nfocus needs your password to update /etc/hosts:")
+                subprocess.run(["sudo", "-v"])
+            if not sudo_alive():
+                self.notify(
+                    "sudo authentication failed — no changes written.",
+                    severity="error",
+                )
+                return False
+        try:
+            write_hosts_with_sudo(self.active)
+            return True
+        except subprocess.CalledProcessError as exc:
+            self.notify(f"Failed to update hosts: {exc}", severity="error")
+            return False
+
+    # -- actions --------------------------------------------------------
+
+    def _blocked_by_lock(self, action: str = "unblock") -> bool:
+        if self.is_locked:
+            self.notify(
+                f"🔒 Locked for {fmt_remaining(lock_remaining())} — can't {action}.",
+                severity="warning",
+            )
+            return True
+        return False
+
+    def action_toggle(self) -> None:
+        site = self.current_site()
+        if site is None:
+            return
+        if site in self.active:
+            if self._blocked_by_lock("unblock a site"):
+                return
+            self.active.discard(site)
+        else:
+            self.active.add(site)
+        if self.apply():
+            self.refresh_table()
+
+    def action_add(self) -> None:
+        def added(site: str | None) -> None:
+            if not site:
+                return
+            if site not in self.roster:
+                self.roster.append(site)
+            self.active.add(site)  # newly added sites start blocked
+            if self.apply():
+                self.refresh_table(keep_row=self.roster.index(site))
+            self.notify(f"Blocking {site}")
+
+        self.push_screen(AddSite(), added)
+
+    def action_delete(self) -> None:
+        site = self.current_site()
+        if site is None:
+            return
+        if site in self.active and self._blocked_by_lock("remove a blocked site"):
+            return
+        row = self.query_one(DataTable).cursor_row
+        self.roster = [s for s in self.roster if s != site]
+        self.active.discard(site)
+        if self.apply():
+            self.refresh_table(keep_row=row)
+            self.notify(f"Removed {site}")
+
+    def action_block_all(self) -> None:
+        self.active = set(self.roster)
+        if self.apply():
+            self.refresh_table()
+            self.notify("Blocking everything on your list")
+
+    def action_allow_all(self) -> None:
+        if self._blocked_by_lock("clear blocks"):
+            return
+        self.active = set()
+        if self.apply():
+            self.refresh_table()
+            self.notify("Cleared all blocks (roster kept)")
+
+    def action_lock(self) -> None:
+        if self.is_locked:
+            self.notify(
+                f"🔒 Already locked — {fmt_remaining(lock_remaining())} left. "
+                "Lock again to extend.",
+            )
+        if not self.roster:
+            self.notify("Add some sites before locking.", severity="warning")
+            return
+
+        def locked(dur: str | None) -> None:
+            if not dur:
+                return
+            # `focus lock` locks the whole roster; make sure it's all active.
+            self.active = set(self.roster)
+            self.apply()
+            with self.suspend():
+                print(f"\nLocking focus for {dur} (no early unlock)...\n")
+                subprocess.run([str(FOCUS_BIN), "lock", dur])
+                input("\n[enter] to return to focus-tui ")
+            self.load_state()
+            self.refresh_table()
+
+        self.push_screen(LockDuration(), locked)
+
+    def action_refresh(self) -> None:
+        self.load_state()
+        self.refresh_table()
+
+
+def main() -> None:
+    if sys.platform != "darwin":
+        print("focus-tui targets macOS (/etc/hosts + mDNSResponder).",
+              file=sys.stderr)
+    # Pre-authenticate sudo in the plain terminal, before Textual takes over
+    # the screen. Avoids a broken password prompt inside the UI.
+    if not sudo_alive():
+        print("focus needs sudo to edit /etc/hosts. Please authenticate:")
+        subprocess.run(["sudo", "-v"])
+    FocusApp().run()
+
+
+if __name__ == "__main__":
+    main()

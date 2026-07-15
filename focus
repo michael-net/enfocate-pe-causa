@@ -1,0 +1,355 @@
+#!/bin/bash
+#
+# focus — a simple site blocker for macOS, with lockable focus sessions.
+#
+# Blocks/unblocks websites at the OS level by editing /etc/hosts,
+# so they're blocked in every browser. Changes are kept inside a
+# clearly-marked block so the rest of your hosts file is never touched.
+#
+# Usage:
+#   ./focus block instagram.com [twitter.com ...]   block one or more sites
+#   ./focus unblock instagram.com [...]             unblock specific sites
+#   ./focus on                                      re-block everything on your list
+#   ./focus off                                     unblock everything (break time)
+#   ./focus list                                    show what's currently blocked
+#   ./focus lock 90m                                LOCK your list for a set time
+#   ./focus status                                  show lock state + time left
+#
+# Lock sessions (commitment mode):
+#   `lock` starts a focus session you CANNOT end early. A root background
+#   daemon re-applies the block every few seconds — editing /etc/hosts by
+#   hand is reverted automatically, and it survives a reboot. When the
+#   timer runs out the daemon removes itself and unblocks everything.
+#   While locked, `off` and `unblock` are refused. You can only ever
+#   extend a lock, never shorten it. Duration: 90m, 2h, 1h30m, 45 (=min).
+#
+# The list of sites lives in ~/.focus-sites so "on"/"off" remembers them.
+
+set -euo pipefail
+
+HOSTS="/etc/hosts"
+SITES_FILE="$HOME/.focus-sites"
+MARK_START="# >>> focus block >>>"
+MARK_END="# <<< focus block <<<"
+REDIRECT="127.0.0.1"
+
+# Lock / enforcement (root-owned so the tool can't casually clear it)
+LABEL="com.focus.enforcer"
+FOCUS_DIR="/Library/Application Support/focus"
+LOCK_FILE="$FOCUS_DIR/lock"
+ENFORCER="/usr/local/libexec/focus-enforcer"
+PLIST="/Library/LaunchDaemons/$LABEL.plist"
+
+touch "$SITES_FILE"
+
+# Print usage
+usage() {
+  grep '^#' "$0" | sed 's/^# \{0,1\}//' | sed -n '2,34p'
+  exit 1
+}
+
+# Normalize a domain: strip protocol, path, www. -> base domain
+normalize() {
+  echo "$1" | sed -E 's#^https?://##; s#/.*$##; s/^www\.//' | tr '[:upper:]' '[:lower:]'
+}
+
+# Read current site list (one per line), ignoring blanks
+read_sites() {
+  grep -v '^[[:space:]]*$' "$SITES_FILE" 2>/dev/null || true
+}
+
+# ---- lock state helpers ---------------------------------------------------
+
+# 0 (true) if a lock is currently active
+lock_active() {
+  [ -f "$LOCK_FILE" ] || return 1
+  local until now
+  until="$(sed -n '1p' "$LOCK_FILE" 2>/dev/null || true)"
+  now="$(date +%s)"
+  case "$until" in ''|*[!0-9]*) return 1 ;; esac
+  [ "$now" -lt "$until" ]
+}
+
+lock_remaining() {
+  local until now
+  until="$(sed -n '1p' "$LOCK_FILE")"
+  now="$(date +%s)"
+  echo $(( until - now ))
+}
+
+fmt_dur() { # seconds -> "1h 05m"
+  local s=$1
+  printf '%dh %02dm' $(( s / 3600 )) $(( (s % 3600) / 60 ))
+}
+
+# Parse a duration like 90m / 2h / 1h30m / 45 (=minutes) -> seconds on stdout
+parse_duration() {
+  local d="$1" total=0 rest="$1" num unit
+  case "$d" in
+    ''|*[!0-9smhd]*[!0-9smhd]*) : ;;
+  esac
+  if [[ "$d" =~ ^[0-9]+$ ]]; then
+    echo $(( d * 60 )); return 0
+  fi
+  while [ -n "$rest" ]; do
+    if [[ "$rest" =~ ^([0-9]+)([smhd])(.*)$ ]]; then
+      num="${BASH_REMATCH[1]}"; unit="${BASH_REMATCH[2]}"; rest="${BASH_REMATCH[3]}"
+      case "$unit" in
+        s) total=$(( total + num )) ;;
+        m) total=$(( total + num * 60 )) ;;
+        h) total=$(( total + num * 3600 )) ;;
+        d) total=$(( total + num * 86400 )) ;;
+      esac
+    else
+      return 1
+    fi
+  done
+  [ "$total" -gt 0 ] || return 1
+  echo "$total"
+}
+
+# ---- applying the block ---------------------------------------------------
+
+# Rewrite the managed block in /etc/hosts to match the current list.
+apply() {
+  local tmp
+  tmp="$(mktemp)"
+  sed "/^${MARK_START}$/,/^${MARK_END}$/d" "$HOSTS" > "$tmp"
+  local sites
+  sites="$(read_sites)"
+  if [ -n "$sites" ]; then
+    {
+      echo "$MARK_START"
+      while IFS= read -r site; do
+        [ -z "$site" ] && continue
+        echo "$REDIRECT $site"
+        echo "$REDIRECT www.$site"
+      done <<< "$sites"
+      echo "$MARK_END"
+    } >> "$tmp"
+  fi
+  echo "Updating $HOSTS (you may be asked for your password)..."
+  sudo cp "$tmp" "$HOSTS"
+  rm -f "$tmp"
+  sudo dscacheutil -flushcache 2>/dev/null || true
+  sudo killall -HUP mDNSResponder 2>/dev/null || true
+}
+
+# ---- installing the enforcement daemon ------------------------------------
+
+install_daemon() {
+  local until="$1" sites="$2"
+  local enf_tmp plist_tmp lock_tmp
+  enf_tmp="$(mktemp)"; plist_tmp="$(mktemp)"; lock_tmp="$(mktemp)"
+
+  # The enforcer: a self-contained root daemon. It re-applies the block
+  # every 5s until the timer expires, then removes itself entirely.
+  cat > "$enf_tmp" <<'ENFORCER'
+#!/bin/bash
+set -u
+HOSTS="/etc/hosts"
+MARK_START="# >>> focus block >>>"
+MARK_END="# <<< focus block <<<"
+REDIRECT="127.0.0.1"
+LABEL="com.focus.enforcer"
+FOCUS_DIR="/Library/Application Support/focus"
+LOCK_FILE="$FOCUS_DIR/lock"
+ENFORCER="/usr/local/libexec/focus-enforcer"
+PLIST="/Library/LaunchDaemons/$LABEL.plist"
+
+write_block() { # arg: newline-separated sites ("" clears the block)
+  local sites="$1" tmp
+  tmp="$(mktemp)"
+  sed "/^${MARK_START}$/,/^${MARK_END}$/d" "$HOSTS" > "$tmp"
+  if [ -n "$sites" ]; then
+    {
+      echo "$MARK_START"
+      while IFS= read -r s; do
+        [ -z "$s" ] && continue
+        echo "$REDIRECT $s"
+        echo "$REDIRECT www.$s"
+      done <<< "$sites"
+      echo "$MARK_END"
+    } >> "$tmp"
+  fi
+  if ! cmp -s "$tmp" "$HOSTS"; then
+    cp "$tmp" "$HOSTS"
+    dscacheutil -flushcache 2>/dev/null || true
+    killall -HUP mDNSResponder 2>/dev/null || true
+  fi
+  rm -f "$tmp"
+}
+
+cleanup_and_exit() {
+  write_block ""                      # unblock everything
+  rm -f "$LOCK_FILE"
+  rm -f "$PLIST" "$ENFORCER"
+  launchctl bootout "system/$LABEL" 2>/dev/null || true
+  exit 0
+}
+
+while true; do
+  [ -f "$LOCK_FILE" ] || cleanup_and_exit
+  until_epoch="$(sed -n '1p' "$LOCK_FILE" 2>/dev/null || true)"
+  case "$until_epoch" in ''|*[!0-9]*) cleanup_and_exit ;; esac
+  now="$(date +%s)"
+  [ "$now" -ge "$until_epoch" ] && cleanup_and_exit
+  sites="$(sed -n '2,$p' "$LOCK_FILE")"
+  write_block "$sites"
+  sleep 5
+done
+ENFORCER
+
+  cat > "$plist_tmp" <<PLIST
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>$LABEL</string>
+  <key>ProgramArguments</key>
+  <array><string>$ENFORCER</string></array>
+  <key>KeepAlive</key><true/>
+  <key>RunAtLoad</key><true/>
+  <key>ProcessType</key><string>Background</string>
+</dict>
+</plist>
+PLIST
+
+  # lock file: line 1 = until-epoch, then one site per line
+  { echo "$until"; printf '%s\n' "$sites"; } > "$lock_tmp"
+
+  echo "Installing focus enforcement daemon (needs your password)..."
+  sudo mkdir -p "$FOCUS_DIR" /usr/local/libexec
+  sudo cp "$lock_tmp"  "$LOCK_FILE"; sudo chmod 644 "$LOCK_FILE"
+  sudo cp "$enf_tmp"   "$ENFORCER";  sudo chmod 755 "$ENFORCER"
+  sudo cp "$plist_tmp" "$PLIST";     sudo chmod 644 "$PLIST"
+  rm -f "$enf_tmp" "$plist_tmp" "$lock_tmp"
+
+  # (re)load — bootout first so an extend re-reads cleanly
+  sudo launchctl bootout "system/$LABEL" 2>/dev/null || true
+  sudo launchctl bootstrap system "$PLIST"
+}
+
+# ---------------------------------------------------------------------------
+
+cmd="${1:-}"; shift || true
+
+case "$cmd" in
+  block)
+    [ $# -eq 0 ] && usage
+    for raw in "$@"; do
+      site="$(normalize "$raw")"
+      if grep -qxF "$site" "$SITES_FILE" 2>/dev/null; then
+        echo "already blocked: $site"
+      else
+        echo "$site" >> "$SITES_FILE"
+        echo "blocking: $site"
+      fi
+    done
+    apply
+    # If a lock is running, fold the new sites into the enforced set too.
+    if lock_active; then
+      until="$(sed -n '1p' "$LOCK_FILE")"
+      install_daemon "$until" "$(read_sites)"
+    fi
+    ;;
+
+  unblock)
+    [ $# -eq 0 ] && usage
+    if lock_active; then
+      echo "🔒 Locked for $(fmt_dur "$(lock_remaining)") more — unblocking is disabled."
+      exit 1
+    fi
+    for raw in "$@"; do
+      site="$(normalize "$raw")"
+      if grep -qxF "$site" "$SITES_FILE" 2>/dev/null; then
+        grep -vxF "$site" "$SITES_FILE" > "$SITES_FILE.tmp" || true
+        mv "$SITES_FILE.tmp" "$SITES_FILE"
+        echo "unblocking: $site"
+      else
+        echo "not on list: $site"
+      fi
+    done
+    apply
+    ;;
+
+  on)
+    echo "Focus ON — blocking your list."
+    apply
+    ;;
+
+  off)
+    if lock_active; then
+      echo "🔒 Locked for $(fmt_dur "$(lock_remaining)") more — you can't turn focus off."
+      exit 1
+    fi
+    echo "Focus OFF — clearing all blocks (your list is kept for later)."
+    tmp="$(mktemp)"
+    sed "/^${MARK_START}$/,/^${MARK_END}$/d" "$HOSTS" > "$tmp"
+    sudo cp "$tmp" "$HOSTS"
+    rm -f "$tmp"
+    sudo dscacheutil -flushcache 2>/dev/null || true
+    sudo killall -HUP mDNSResponder 2>/dev/null || true
+    ;;
+
+  lock)
+    [ $# -eq 0 ] && { echo "Usage: focus lock <duration>   e.g. 90m, 2h, 1h30m, 45"; exit 1; }
+    secs="$(parse_duration "$1")" || { echo "Bad duration: $1 (try 90m, 2h, 1h30m, 45)"; exit 1; }
+    now="$(date +%s)"
+    new_until=$(( now + secs ))
+
+    sites="$(read_sites)"
+    if [ -z "$sites" ]; then
+      echo "Your block list is empty — add sites first (focus block instagram.com)."
+      exit 1
+    fi
+
+    if lock_active; then
+      cur_until="$(sed -n '1p' "$LOCK_FILE")"
+      if [ "$new_until" -le "$cur_until" ]; then
+        echo "🔒 Already locked for $(fmt_dur "$(lock_remaining)") more."
+        echo "You can only extend a lock, not shorten it."
+        exit 1
+      fi
+      echo "Extending lock to $(fmt_dur "$secs") from now."
+    else
+      echo "🔒 Locking focus for $(fmt_dur "$secs"). There is no early unlock."
+    fi
+
+    apply
+    install_daemon "$new_until" "$sites"
+    echo "Locked until $(date -r "$new_until" '+%a %H:%M'). Blocking:"
+    echo "$sites" | sed 's/^/  • /'
+    ;;
+
+  status)
+    if lock_active; then
+      echo "🔒 LOCKED — $(fmt_dur "$(lock_remaining)") remaining (until $(date -r "$(sed -n '1p' "$LOCK_FILE")" '+%a %H:%M'))."
+      echo "Enforced sites:"
+      sed -n '2,$p' "$LOCK_FILE" | grep -v '^[[:space:]]*$' | sed 's/^/  • /'
+    else
+      echo "Unlocked. No active focus session."
+      sites="$(read_sites)"
+      if [ -n "$sites" ]; then
+        echo "Block list:"
+        echo "$sites" | sed 's/^/  • /'
+      fi
+    fi
+    ;;
+
+  list|ls|"")
+    sites="$(read_sites)"
+    if [ -z "$sites" ]; then
+      echo "No sites on your block list yet."
+      echo "Try: ./focus block instagram.com"
+    else
+      echo "Sites on your block list:"
+      echo "$sites" | sed 's/^/  • /'
+    fi
+    lock_active && echo "🔒 Locked for $(fmt_dur "$(lock_remaining)") more."
+    ;;
+
+  *)
+    usage
+    ;;
+esac
