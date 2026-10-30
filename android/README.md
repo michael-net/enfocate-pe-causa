@@ -42,6 +42,10 @@ El APK queda en `app/build/outputs/apk/debug/app-debug.apk`. Cada cambio en GitH
 2. En la app, activa el **acceso a uso** y el servicio en **Accesibilidad**.
 3. Si Accesibilidad dice que no está disponible: Ajustes > Apps > Enfócate pe causa > menú ⋮ > **Permitir ajustes restringidos**.
 
+## Publicar
+
+Para publicar en GitHub Releases, F-Droid o Google Play, sigue [PUBLICAR.md](PUBLICAR.md).
+
 ## Pendiente
 
 - Probar en celulares de varias marcas y medir la batería.

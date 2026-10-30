@@ -2,12 +2,14 @@ package work.michaelnet.enfocate
 
 import android.accessibilityservice.AccessibilityService
 import android.content.BroadcastReceiver
+import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
+import android.provider.Settings
 import android.view.accessibility.AccessibilityEvent
 import java.time.Duration
 import java.time.LocalDateTime
@@ -98,7 +100,14 @@ class Guardian : AccessibilityService() {
     companion object {
         private var instancia: Guardian? = null
 
-        val activo: Boolean get() = instancia != null
+        /** Si el servicio está activado en Ajustes > Accesibilidad. */
+        fun activado(context: Context): Boolean {
+            val activos = Settings.Secure.getString(
+                context.contentResolver, Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES
+            ) ?: return false
+            val nombre = ComponentName(context, Guardian::class.java)
+            return activos.split(':').any { ComponentName.unflattenFromString(it) == nombre }
+        }
 
         /** Después de cambiar la lista, para que Android avise de las apps nuevas. */
         fun listaCambiada() {

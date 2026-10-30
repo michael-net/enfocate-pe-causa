@@ -52,6 +52,21 @@ En Windows, el código está en `windows/` y se puede revisar igual:
 Select-String -Path windows\*.cs, windows\*\*.cs -Pattern 'WebClient|HttpClient|WebRequest|Socket|TcpClient'
 ```
 
+## iPhone y Android
+
+Las apps de celular siguen las mismas reglas: funcionan solo en tu celular, no tienen cuentas, anuncios ni analíticas, y no recopilan ni envían datos.
+
+| | iPhone | Android |
+|---|---|---|
+| Qué guarda | Tu configuración y las fichas opacas de las apps que elegiste, en el grupo de la app | Tu configuración y la lista de apps que elegiste, en el almacenamiento privado de la app |
+| Cómo sabe qué bloquear | iOS le da fichas opacas: la app nunca sabe qué apps elegiste | Por el nombre del paquete de cada app que elegiste |
+| Cómo mide el uso | Lo mide iOS. La app solo recibe el aviso de "se llegó al límite" | Lee los minutos que ya registra Android. No guarda un historial propio |
+| Internet | Sin código de red | Sin permiso de internet: Android no la deja conectarse |
+| Permisos | Tiempo de uso | Accesibilidad (sin leer la pantalla), acceso a uso y notificaciones |
+| Copias en la nube | No | No (`allowBackup="false"`) |
+
+Al desinstalar la app se borra todo lo que guardó.
+
 ## Reportar un problema
 
 Si encuentras un problema de seguridad, abre un issue en este repositorio sin incluir datos personales.

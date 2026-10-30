@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
@@ -165,7 +166,8 @@ class MainActivity : ComponentActivity() {
     @Composable
     private fun Permisos() {
         val uso = Uso(this).permitido()
-        val accesibilidad = Guardian.activo
+        val accesibilidad = Guardian.activado(this)
+        var aviso by remember { mutableStateOf(false) }
         if (uso && accesibilidad) return
         Seccion("Para empezar") {
             Text("Enfócate pe causa necesita dos permisos. No tiene acceso a internet: nada sale de tu celular.")
@@ -175,7 +177,7 @@ class MainActivity : ComponentActivity() {
                 }
             }
             if (!accesibilidad) {
-                TextButton(onClick = { startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)) }) {
+                TextButton(onClick = { aviso = true }) {
                     Text("2. Activar Enfócate pe causa en Accesibilidad (para bloquear)")
                 }
                 Text(
@@ -184,6 +186,29 @@ class MainActivity : ComponentActivity() {
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
+        }
+        // Aviso destacado antes de pedir accesibilidad: lo exige Google Play y es lo justo con quien la instala.
+        if (aviso) {
+            AlertDialog(
+                onDismissRequest = { aviso = false },
+                title = { Text("Cómo se usa la accesibilidad") },
+                text = {
+                    Text(
+                        "Enfócate pe causa usa el servicio de accesibilidad de Android solo para saber cuándo abres " +
+                            "una de las apps que elegiste, y llevarte al inicio si está bloqueada.\n\n" +
+                            "No lee la pantalla, lo que escribes ni tus mensajes. No guarda qué apps abres y no " +
+                            "tiene acceso a internet, así que nada sale de tu celular.\n\n" +
+                            "Puedes desactivarlo cuando quieras en Ajustes > Accesibilidad."
+                    )
+                },
+                confirmButton = {
+                    TextButton(onClick = {
+                        aviso = false
+                        startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+                    }) { Text("Acepto, abrir Accesibilidad") }
+                },
+                dismissButton = { TextButton(onClick = { aviso = false }) { Text("Ahora no") } },
+            )
         }
     }
 

@@ -1,0 +1,77 @@
+# Compila la versión firmada de Android. Con una etiqueta android-v*, la publica en Releases
+# para que cualquiera la descargue desde el celular. Ver android/PUBLICAR.md.
+#
+# Necesita estos secretos del repositorio (Settings > Secrets and variables > Actions):
+#   ANDROID_KEYSTORE_BASE64     El almacén de claves (.jks) en base64
+#   ANDROID_KEYSTORE_PASSWORD   Su contraseña
+#   ANDROID_KEY_ALIAS           El alias de la clave
+#   ANDROID_KEY_PASSWORD        La contraseña de la clave
+name: Publicar Android
+
+on:
+  push:
+    tags: ['android-v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  publicar:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: android
+    env:
+      ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+      ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+      ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+      ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+      VERSION_CODE: ${{ github.run_number }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Preparar la firma
+        run: |
+          for s in ANDROID_KEYSTORE_BASE64 ANDROID_KEYSTORE_PASSWORD ANDROID_KEY_ALIAS ANDROID_KEY_PASSWORD; do
+            if [ -z "${!s}" ]; then echo "Falta el secreto $s. Ver android/PUBLICAR.md."; exit 1; fi
+          done
+          printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/firma.jks"
+          echo "ANDROID_KEYSTORE=$RUNNER_TEMP/firma.jks" >> "$GITHUB_ENV"
+      - name: Probar y compilar
+        run: ./gradlew --no-daemon testReleaseUnitTest assembleRelease bundleRelease
+      - name: Comprobar que no tiene permiso de internet
+        run: |
+          AAPT="$(ls -d "$ANDROID_HOME"/build-tools/*/ | sort -V | tail -1)aapt"
+          if "$AAPT" dump permissions app/build/outputs/apk/release/app-release.apk | grep -q 'android.permission.INTERNET'; then
+            echo "La app no debe tener permiso de internet"; exit 1
+          fi
+          cp app/build/outputs/apk/release/app-release.apk "$RUNNER_TEMP/enfocate-pe-causa.apk"
+      - name: Borrar la firma
+        if: always()
+        run: rm -f "$RUNNER_TEMP/firma.jks"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: enfocate-android
+          path: |
+            ${{ runner.temp }}/enfocate-pe-causa.apk
+            android/app/build/outputs/bundle/release/app-release.aab
+      - name: Publicar en Releases
+        if: startsWith(github.ref, 'refs/tags/android-v')
+        uses: softprops/action-gh-release@v2
+        with:
+          prerelease: true
+          files: ${{ runner.temp }}/enfocate-pe-causa.apk
+          body: |
+            Versión de prueba de Enfócate pe causa para Android 8 o superior.
+
+            1. Descarga `enfocate-pe-causa.apk` desde el celular y ábrelo.
+            2. Si Android lo pide, permite instalar apps de esta fuente.
+            3. En la app, activa el acceso a uso y el servicio en Accesibilidad.
+            4. Si Accesibilidad dice que no está disponible: Ajustes > Apps > Enfócate pe causa > menú ⋮ > Permitir ajustes restringidos.
+
+            La app no tiene permiso de internet.

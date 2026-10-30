@@ -1,0 +1,64 @@
+# Firma la app de iPhone y la sube a TestFlight. Se ejecuta con una etiqueta ios-v*,
+# o a mano desde la pestaña Actions cuando este archivo esté en la rama principal.
+#
+# Necesita estos secretos del repositorio (Settings > Secrets and variables > Actions):
+#   APPLE_TEAM_ID    Team ID de tu cuenta de Apple Developer
+#   ASC_KEY_ID       ID de la clave de API de App Store Connect (rol Administrador)
+#   ASC_ISSUER_ID    Issuer ID de esa clave
+#   ASC_KEY_P8       Contenido del archivo .p8 de la clave
+# Ver ios/PUBLICAR.md.
+name: TestFlight
+
+on:
+  push:
+    tags: ['ios-v*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  subir:
+    runs-on: macos-latest
+    defaults:
+      run:
+        working-directory: ios
+    env:
+      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+      ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+      ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+      ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Revisar los secretos
+        run: |
+          for s in APPLE_TEAM_ID ASC_KEY_ID ASC_ISSUER_ID ASC_KEY_P8; do
+            if [ -z "${!s}" ]; then echo "Falta el secreto $s. Ver ios/PUBLICAR.md."; exit 1; fi
+          done
+      - name: Generar el proyecto
+        run: |
+          brew install xcodegen
+          sed -i '' "s/DEVELOPMENT_TEAM: \"\"/DEVELOPMENT_TEAM: \"$APPLE_TEAM_ID\"/" project.yml
+          sed -i '' "s/CURRENT_PROJECT_VERSION: \"1\"/CURRENT_PROJECT_VERSION: \"$GITHUB_RUN_NUMBER\"/" project.yml
+          xcodegen
+      - name: Guardar la clave de App Store Connect
+        run: |
+          mkdir -p "$RUNNER_TEMP/clave"
+          printf '%s' "$ASC_KEY_P8" > "$RUNNER_TEMP/clave/AuthKey.p8"
+      - name: Compilar y firmar
+        run: |
+          xcodebuild archive -project Enfocate.xcodeproj -scheme Enfocate \
+            -destination 'generic/platform=iOS' -archivePath "$RUNNER_TEMP/Enfocate.xcarchive" \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath "$RUNNER_TEMP/clave/AuthKey.p8" \
+            -authenticationKeyID "$ASC_KEY_ID" -authenticationKeyIssuerID "$ASC_ISSUER_ID"
+      - name: Subir a TestFlight
+        run: |
+          xcodebuild -exportArchive -archivePath "$RUNNER_TEMP/Enfocate.xcarchive" \
+            -exportOptionsPlist ExportOptions.plist -exportPath "$RUNNER_TEMP/exportado" \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath "$RUNNER_TEMP/clave/AuthKey.p8" \
+            -authenticationKeyID "$ASC_KEY_ID" -authenticationKeyIssuerID "$ASC_ISSUER_ID"
+      - name: Borrar la clave
+        if: always()
+        run: rm -rf "$RUNNER_TEMP/clave"

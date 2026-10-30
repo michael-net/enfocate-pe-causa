@@ -36,6 +36,10 @@ Para el simulador no hace falta firmar. Para un iPhone real:
 2. Para probar en tu iPhone basta el permiso Family Controls de desarrollo, que Xcode agrega solo.
 3. Para TestFlight y la App Store hay que pedir a Apple el permiso de distribución, para la app y para cada extensión.
 
+## Publicar
+
+Para TestFlight y la App Store, sigue [PUBLICAR.md](PUBLICAR.md): tiene el texto para pedir Family Controls y la compilación que sube la app.
+
 ## Limitaciones conocidas
 
 - iOS no avisa del desbloqueo: la mañana empieza al terminar la noche, o con una automatización de Atajos.

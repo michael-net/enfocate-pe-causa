@@ -1,0 +1,5 @@
+Enfócate pe causa helps you break the habit of opening social media as soon as you wake up and before you sleep. The app is in Spanish.
+
+You choose the apps. It blocks them at night, for 45 minutes in the morning, after 15 minutes a day, and during focus sessions you can't cancel halfway. You get two 5-minute passes a day.
+
+It has no internet permission, no accounts, no ads and no analytics. It uses the Accessibility service only to know when one of your chosen apps opens; it can't read the screen. Source code: https://github.com/michael-net/enfocate-pe-causa
