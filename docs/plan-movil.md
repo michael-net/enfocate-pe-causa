@@ -17,24 +17,28 @@ Igual que en la computadora, pero pensada para los momentos en que el celular ge
 | Regla | Qué pasa | Valor por defecto |
 |---|---|---|
 | **Mañana** | Al empezar el día, las redes sociales quedan bloqueadas | 45 minutos desde que empiezas a usar el celular |
-| **Noche** | Antes de dormir, las redes sociales quedan bloqueadas hasta la mañana | Desde las 22:00 |
-| **Pase de 5 minutos** | Durante el bloqueo de la mañana y el de la noche, puedes usar las redes 5 minutos, una sola vez por bloqueo | 5 min de uso, 1 por bloqueo |
+| **Noche** | Antes de dormir, las redes sociales quedan bloqueadas hasta una hora fija | De 22:00 a 6:00. Tú eliges las dos horas |
+| **Pase de 5 minutos** | En cada bloqueo de la mañana y de la noche, cada app bloqueada tiene su propio pase para revisarla | 5 min de uso por app, en cada bloqueo |
 | **Límite diario** | Cada red social se puede usar como máximo este tiempo al día. Después queda bloqueada hasta medianoche | 15 min por app |
 | **Sesión de enfoque** | Bloquea todo lo que elijas. No se cancela, solo se extiende | 1 h, 1 h 30 min, 2 h o 3 h. Extender 30 min |
 
 - **Qué cuenta como red social:** la eliges tú. Se sugieren Instagram, TikTok, Facebook, X, YouTube, Snapchat, Threads y Reddit. WhatsApp y las apps de mensajes quedan fuera por defecto, como en la sesión automática de escritorio.
-- **El pase de 5 minutos** se mide en uso real, no en reloj. Si abres Instagram 2 minutos y lo cierras, te quedan 3.
-- **El límite de 15 minutos** se acumula en todo el día, también durante los pases.
+- **El pase de 5 minutos es de cada app.** Usar el de Instagram no gasta el de TikTok. Siempre está disponible en los bloqueos de la mañana y de la noche, y se renueva en cada bloqueo.
+- **El pase se mide en uso real**, no en reloj. Si abres Instagram 2 minutos y lo cierras, te quedan 3 de ese pase.
+- **El pase no existe en las sesiones de enfoque**, que siguen sin poder negociarse, **ni después de llegar al límite diario** de esa app.
+- **El límite de 15 minutos** se acumula en todo el día, también durante los pases. Con los dos pases, cada app ya puede usarse 10 de esos 15 minutos en la mañana y la noche.
 - **Lo que no se puede hacer no aparece**, como en escritorio: durante un bloqueo no hay botón para desactivarlo.
 
 ### Cuándo empieza "la mañana"
 
 | | Android | iPhone |
 |---|---|---|
-| Cómo lo sabe | El primer desbloqueo después de las 4:00 | iOS no avisa a las apps cuando se enciende o se desbloquea el celular |
-| Solución | Automática | Una automatización de la app Atajos, "Al despertar" o "Al detener la alarma", que inicia el bloqueo de 45 minutos. Si no hay automatización, se usa un horario fijo que eliges (por ejemplo, de 6:00 a 6:45) |
+| Cómo lo sabe | El primer desbloqueo después de que termina la noche | iOS no avisa a las apps cuando se enciende o se desbloquea el celular |
+| Solución | Automática | Una automatización de la app Atajos, "Al despertar" o "Al detener la alarma", que inicia el bloqueo de 45 minutos. Si no hay automatización, empieza al terminar la noche (por ejemplo, de 6:00 a 6:45) |
 
 En Android también se detecta el encendido del celular, pero lo que importa es el primer uso del día, porque casi nadie apaga el celular por la noche.
+
+Si usas el celular antes de que termine la noche, por ejemplo a las 5:30, sigue valiendo la noche. La mañana empieza con el primer uso después de las 6:00. Así la noche y la mañana no se superponen y no queda un hueco entre ellas.
 
 ## iPhone (iOS 16 o superior)
 
@@ -53,8 +57,8 @@ Cómo se arma cada regla:
 | Regla | Implementación |
 |---|---|
 | Mañana | Un *App Intent* "Empezar la mañana" que la automatización de Atajos ejecuta al despertar. Activa el escudo y un horario de 45 minutos que lo quita al terminar. Si no hay automatización, un horario fijo diario |
-| Noche | Un horario diario de `DeviceActivity`, por ejemplo de 22:00 a 6:00, que pone y quita el escudo |
-| Pase de 5 minutos | El escudo tiene un botón "Usar 5 minutos". La extensión `ShieldAction` quita el escudo y vigila un evento de 5 minutos de uso. Al llegar, la extensión `DeviceActivityMonitor` vuelve a ponerlo |
+| Noche | Un horario diario de `DeviceActivity` con hora fija de inicio y de fin, por ejemplo de 22:00 a 6:00, que pone y quita el escudo |
+| Pase de 5 minutos | El escudo tiene un botón "Usar 5 minutos". La extensión `ShieldAction` recibe la ficha de la app que se intentó abrir, le quita el escudo solo a ella y vigila un evento de 5 minutos de uso de esa app. Al llegar, la extensión `DeviceActivityMonitor` vuelve a ponerlo. Las fichas que ya usaron su pase en el bloqueo actual se guardan en el grupo compartido de la app, para no dar un segundo pase |
 | Límite diario | Un horario de 0:00 a 23:59 con un evento de 15 minutos por app. Al llegar, se bloquea solo esa app hasta medianoche |
 | Sesión de enfoque | Escudo sobre lo elegido y un horario hasta la hora de fin. Extender mueve la hora de fin |
 
@@ -112,9 +116,9 @@ Cómo se arma cada regla:
 
 | Regla | Implementación |
 |---|---|
-| Mañana | El servicio escucha el desbloqueo. El primero después de las 4:00 inicia 45 minutos de bloqueo |
-| Noche | Se calcula con la hora cada vez que se abre una red social. No hacen falta alarmas |
-| Pase de 5 minutos | La pantalla de bloqueo tiene el botón "Usar 5 minutos". El tiempo se mide con `UsageStatsManager` |
+| Mañana | El servicio escucha el desbloqueo. El primero después de que termina la noche inicia 45 minutos de bloqueo |
+| Noche | Se calcula con las horas fijas cada vez que se abre una red social. No hacen falta alarmas |
+| Pase de 5 minutos | La pantalla de bloqueo tiene el botón "Usar 5 minutos" para esa app. El uso se mide con `UsageStatsManager`. Se guarda qué apps ya usaron su pase en el bloqueo actual |
 | Límite diario | Al abrir una red social se consulta su uso de hoy con `UsageStatsManager`, que guarda el propio Android. Si ya pasó de 15 minutos, se bloquea. Si no, se programa una revisión para el momento en que llegue |
 | Sesión de enfoque | Una notificación con la cuenta regresiva y bloqueo de lo elegido hasta la hora de fin |
 
@@ -175,11 +179,15 @@ docs/       reglas comunes y este plan
 
 No se recomienda Flutter ni React Native: el núcleo son APIs nativas de cada sistema, y una capa extra suma tamaño, dependencias y superficie de ataque sin ahorrar trabajo.
 
+## Decisiones tomadas
+
+- **La noche termina a una hora fija**, que eliges tú.
+- **El pase de 5 minutos es de cada app bloqueada**, y está disponible en cada bloqueo de la mañana y de la noche.
+
 ## Preguntas abiertas
 
-- ¿La noche termina a una hora fija o cuando empieza la mañana? La propuesta es que dure hasta que termina el bloqueo de la mañana, para que no haya un hueco al despertar.
-- ¿El pase de 5 minutos es uno por bloqueo o uno por app? La propuesta es uno por bloqueo, compartido entre todas las redes, para que no se convierta en 5 minutos multiplicado por cada app.
-- ¿Nombre y diseño de la pantalla de bloqueo? Debería seguir el [diseño](diseno.md): calma, sin colores de alerta, solo el tiempo que falta.
+- ¿Debe haber pase también en las sesiones de enfoque o después del límite diario? La propuesta es que no, para que la sesión siga sin poder negociarse y el límite de 15 minutos sea un límite real.
+- ¿Nombre y diseño de la pantalla de bloqueo? Debería seguir el [diseño](diseno.md): calma, sin colores de alerta, solo el tiempo que falta y el botón del pase.
 
 ## Fuentes
 
