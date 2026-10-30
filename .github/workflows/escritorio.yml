@@ -1,0 +1,60 @@
+# Compila y prueba las versiones de escritorio en máquinas reales de macOS y Windows.
+name: Escritorio
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Revisar los scripts
+        run: |
+          for f in macos/*.sh macos/cli/focus macos/daemon/*.sh; do bash -n "$f"; done
+      - name: Compilar el widget
+        run: swiftc -O macos/app/main.swift -o "$RUNNER_TEMP/Enfocate"
+
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Instalar como lo haría la parte con permisos de administrador
+        shell: powershell
+        run: |
+          # Las órdenes deben tener como dueño la cuenta que instaló: se usa el dueño de un archivo de prueba.
+          $prueba = Join-Path $env:RUNNER_TEMP 'dueno'
+          Set-Content $prueba 'x'
+          $sid = (Get-Acl $prueba).GetOwner([Security.Principal.SecurityIdentifier]).Value
+          powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -File windows\instalar.ps1 -Sid $sid -Elevado
+          if ($LASTEXITCODE) { throw "El instalador falló ($LASTEXITCODE)" }
+      - name: Probar el servicio
+        shell: powershell
+        run: |
+          $datos = Join-Path $env:ProgramData 'Enfocate'
+          function Orden($c) {
+            $n = 'cmd-{0:D13}-{1:x8}' -f [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds(), (Get-Random)
+            Set-Content (Join-Path $datos "ordenes\$n") $c -Encoding ASCII
+            Start-Sleep -Seconds 3
+          }
+          function Fase { (Get-Content (Join-Path $datos 'status') | Where-Object { $_ -like 'phase=*' }) -replace 'phase=', '' }
+          Start-Sleep -Seconds 3
+          if ((Fase) -ne 'idle') { throw "Se esperaba idle: $(Fase)" }
+          # Con comodín: el script del flujo no conserva la "ó" del nombre de la carpeta.
+          if (-not (Test-Path "$env:ProgramFiles\Enf*cate pe causa\Enfocate.exe")) { throw 'Falta la app' }
+          Orden 'site+ example.com'
+          if ((Get-Content (Join-Path $datos 'sites')) -notcontains 'example.com') { throw 'No se agregó el sitio' }
+          Orden 'focus60'
+          if ((Fase) -ne 'focus') { throw "Se esperaba focus: $(Fase)" }
+          $hosts = Get-Content "$env:WINDIR\System32\drivers\etc\hosts" -Raw
+          if ($hosts -notmatch '127\.0\.0\.1 example\.com') { throw 'hosts no tiene el bloqueo' }
+          Orden 'site- example.com'
+          if ((Get-Content (Join-Path $datos 'sites')) -notcontains 'example.com') { throw 'Se cambió la lista durante una sesión' }
+          Orden 'stop'
+          if ((Fase) -ne 'focus') { throw 'Se terminó una sesión de enfoque antes de tiempo' }
+          Write-Host 'El servicio funciona.'
