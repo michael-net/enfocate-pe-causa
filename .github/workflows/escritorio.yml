@@ -45,7 +45,8 @@ jobs:
           function Fase { (Get-Content (Join-Path $datos 'status') | Where-Object { $_ -like 'phase=*' }) -replace 'phase=', '' }
           Start-Sleep -Seconds 3
           if ((Fase) -ne 'idle') { throw "Se esperaba idle: $(Fase)" }
-          if (-not (Test-Path 'C:\Program Files\Enfócate pe causa\Enfocate.exe')) { throw 'Falta la app' }
+          # Con comodín: el script del flujo no conserva la "ó" del nombre de la carpeta.
+          if (-not (Test-Path "$env:ProgramFiles\Enf*cate pe causa\Enfocate.exe")) { throw 'Falta la app' }
           Orden 'site+ example.com'
           if ((Get-Content (Join-Path $datos 'sites')) -notcontains 'example.com') { throw 'No se agregó el sitio' }
           Orden 'focus60'
