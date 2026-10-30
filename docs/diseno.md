@@ -11,14 +11,14 @@
 
 Cada estado tiene un icono con el mismo significado en ambos sistemas.
 
-| Estado | macOS (SF Symbols) | Windows (Fluent UI System Icons) |
+| Estado | macOS (SF Symbols) | Windows (forma equivalente, dibujada) |
 |---|---|---|
 | Sin sesión y sesión de enfoque | `scope` | `Target` |
 | Pomodoro, trabajo | `timer` | `Timer` |
 | Pomodoro, descanso | `cup.and.saucer` | `DrinkCoffee` |
 | Servicio sin respuesta | `exclamationmark.triangle` | `Warning` |
 
-SF Symbols solo se puede usar en plataformas de Apple, y por eso Windows necesita su propio conjunto. Fluent UI System Icons es de Microsoft y tiene licencia MIT. Los nombres de Windows deben confirmarse al implementar.
+SF Symbols solo se puede usar en plataformas de Apple, y por eso Windows necesita su propio conjunto. En Windows, los iconos se dibujan en tiempo real siguiendo esas mismas formas, para no depender de archivos externos y adaptarse al tamaño y al tema de la barra de tareas.
 
 ## Barra de menú y bandeja
 
@@ -39,7 +39,7 @@ Durante una sesión, una tarjeta muestra el nombre, el tiempo que falta en grand
 | Pomodoro, trabajo | Pomodoro activo | Ronda 2 de 4 |
 | Pomodoro, descanso | Descanso | Ronda 2 de 4 |
 
-La tarjeta encabeza el menú. También aparece como aviso flotante arriba a la derecha durante 10 segundos cuando empieza una sesión o ronda, y al encender o abrir la Mac con una sesión en curso. El aviso no quita el foco y se cierra con un clic. En Windows iría abajo a la derecha, junto a la bandeja.
+La tarjeta encabeza el menú. También aparece como aviso flotante durante 10 segundos cuando empieza una sesión o ronda, y al encender o abrir la computadora con una sesión en curso. El aviso no quita el foco y se cierra con un clic.
 
 ## Menú
 
@@ -69,11 +69,11 @@ Lo que no se puede hacer no aparece: durante el trabajo no se ofrece terminar.
 
 Una ventana con los grupos Sitios y Apps. Cada fila tiene un icono, el nombre, un botón para quitar y un interruptor. Al final de cada grupo se puede agregar uno nuevo.
 
-Un tercer grupo, "Al encender o abrir la Mac", elige qué apps activas bloquea la sesión automática de 45 minutos.
+Un tercer grupo, "Al encender o abrir la Mac" (o "la PC" en Windows), elige qué apps activas bloquea la sesión automática de 45 minutos.
 
 - Solo está disponible sin sesión activa. Si empieza una sesión, la ventana se cierra.
 - Si no hay nada activado, no se puede iniciar una sesión, y el menú lo indica.
-- Usa los controles nativos de cada sistema: `Form` en macOS y `ToggleSwitch` en Windows.
+- Usa los controles nativos de cada sistema: `Form` con interruptores en macOS y casillas de Windows Forms en Windows.
 
 ## Diferencias por sistema
 
@@ -81,12 +81,13 @@ Un tercer grupo, "Al encender o abrir la Mac", elige qué apps activas bloquea l
 |---|---|---|
 | Ubicación | Barra de menú, arriba a la derecha | Bandeja del sistema, abajo a la derecha |
 | Abrir el menú | Clic | Clic izquierdo o derecho |
-| Tiempo restante | Siempre visible junto al icono | Al pasar el cursor, porque la bandeja de Windows solo admite iconos |
-| Tipografía | San Francisco | Segoe UI Variable |
+| Tiempo restante | Siempre visible junto al icono | Minutos dentro del icono, y el tiempo exacto al pasar el cursor, porque la bandeja de Windows solo admite iconos |
+| Tipografía | San Francisco | Segoe UI Variable, o Segoe UI en Windows 10 |
 | Claro y oscuro | Icono de plantilla, automático | Variantes clara y oscura, según el tema |
 | Notificaciones | Centro de notificaciones | Notificaciones de Windows |
+| Aviso flotante | Arriba a la derecha | Abajo a la derecha, junto a la bandeja |
 
-En Windows, el contador no cabe en la bandeja. Se puede mostrar el tiempo restante en minutos dentro del propio icono, como hacen otras apps de bandeja, o en un panel pequeño al hacer clic. Esa decisión queda abierta.
+En Windows, el contador no cabe en la bandeja. Durante una sesión, el icono muestra los minutos que faltan (`25`), o las horas si son 100 minutos o más (`2h`). El tiempo exacto aparece al pasar el cursor y en la tarjeta del menú.
 
 ## Textos
 
@@ -100,4 +101,5 @@ En Windows, el contador no cabe en la bandeja. Se puede mostrar el tiempo restan
 
 - Icono de la app y logo.
 - Notificaciones propias: hoy salen desde `osascript`, con el icono de ese sistema.
-- Versión para Windows: bloqueo con el archivo `hosts` de Windows, un servicio de Windows y un icono de bandeja.
+- Windows: probar en más equipos, sobre todo con pantallas de alta densidad y el tema oscuro.
+- Windows: la ventana Qué bloquear no sigue el tema oscuro.

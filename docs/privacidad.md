@@ -2,9 +2,9 @@
 
 ## Qué datos maneja
 
-La app funciona solo en tu Mac. No se conecta a internet, no tiene cuentas ni analíticas, y no recopila ni envía datos a nadie.
+La app funciona solo en tu computadora. No se conecta a internet, no tiene cuentas ni analíticas, y no recopila ni envía datos a nadie.
 
-Todo lo que guarda está en tu Mac:
+Todo lo que guarda está en tu computadora. En Mac:
 
 | Archivo | Contenido |
 |---|---|
@@ -13,22 +13,24 @@ Todo lo que guarda está en tu Mac:
 | `/Library/Application Support/focus/lock` | Hora de fin y lista bloqueada durante una sesión |
 | `/etc/hosts` | Los sitios bloqueados durante una sesión |
 
-No guarda tu historial, qué sitios intentas abrir, cuánto usas cada app ni estadísticas. `./macos/uninstall.sh` borra todo lo anterior.
+En Windows, lo mismo está en `C:\ProgramData\Enfocate\` (`sites`, `apps`, `auto-skip`, `status`, `sesion.state` y `owner`, el identificador de tu cuenta) y en `C:\Windows\System32\drivers\etc\hosts`.
 
-Tu contraseña la pide macOS mediante `sudo`. La app no la lee ni la guarda.
+No guarda tu historial, qué sitios intentas abrir, cuánto usas cada app ni estadísticas. `macos/uninstall.sh` y `windows\desinstalar.cmd` borran todo lo anterior.
+
+Tu contraseña la pide el sistema (`sudo` en macOS, el aviso de administrador en Windows). La app no la lee ni la guarda.
 
 ## Qué permisos usa
 
-- **Root:** el servicio necesita editar `/etc/hosts` y cerrar apps. Es lo que impide saltarse una sesión, y por eso conviene leer el código antes de instalarlo.
+- **Root en macOS, SYSTEM en Windows:** el servicio necesita editar el archivo `hosts` y cerrar apps. Es lo que impide saltarse una sesión, y por eso conviene leer el código antes de instalarlo.
 - **Cerrar apps:** solo durante un bloqueo, solo las de tu lista y solo procesos de tu usuario.
 
 ## Límites
 
-- Tus listas se pueden leer desde cualquier cuenta de esta Mac, aunque solo root puede cambiarlas.
+- Tus listas se pueden leer desde cualquier cuenta de esta computadora, aunque solo el servicio y los administradores pueden cambiarlas.
 - Otros programas que se ejecuten con tu usuario pueden enviar órdenes al servicio, como iniciar una sesión o cambiar tu lista sin sesión activa. No pueden terminar una sesión ni acortarla.
 - Quien tenga la contraseña de administrador puede saltarse el bloqueo.
-- macOS guarda las notificaciones en su propio centro de notificaciones.
-- Los comandos del sistema (`dscacheutil`, `launchctl`, `pkill`) pueden dejar registros normales de macOS, que se quedan en tu Mac.
+- El sistema guarda las notificaciones en su propio centro de notificaciones.
+- Los comandos del sistema (`dscacheutil`, `launchctl`, `pkill`) pueden dejar registros normales de macOS, y Windows anota en su registro de eventos cuando el servicio arranca o se detiene. Todo se queda en tu computadora.
 
 ## Cómo comprobarlo
 
@@ -42,6 +44,12 @@ Con la app abierta, este comando no debería mostrar conexiones:
 
 ```bash
 lsof -nP -i -a -c Enfocate
+```
+
+En Windows, el código está en `windows/` y se puede revisar igual:
+
+```powershell
+Select-String -Path windows\*.cs, windows\*\*.cs -Pattern 'WebClient|HttpClient|WebRequest|Socket|TcpClient'
 ```
 
 ## Reportar un problema
