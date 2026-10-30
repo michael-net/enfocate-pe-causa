@@ -25,7 +25,7 @@ Por eso **Enfócate pe causa** no es un bloqueador más hecho para controlar a o
 |---|---|---|
 | **macOS** 13 Ventura o superior (Intel y Apple Silicon) | Funciona | Cuenta de administrador y las herramientas de línea de comandos de Xcode (el instalador te las ofrece) |
 | **Windows** 10 y 11 | Nuevo, en prueba | Cuenta de administrador. No hay que instalar nada más |
-| iPhone y Android | En planificación ([plan](docs/plan-movil.md)) | |
+| iPhone y Android | En desarrollo en la rama [`movil`](https://github.com/michael-net/enfocate-pe-causa/tree/movil) ([plan](docs/plan-movil.md)) | |
 | Linux | No disponible | |
 
 La app se compila en tu propia computadora al instalarla. Así funciona en cualquier procesador y no hay que confiar en un archivo descargado.
