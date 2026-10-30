@@ -49,6 +49,16 @@ jobs:
         run: brew install xcodegen && xcodegen
       - name: Compilar para el simulador
         run: |
-          xcodebuild build -project Enfocate.xcodeproj -scheme Enfocate \
+          xcodebuild build -project Enfocate.xcodeproj -scheme Enfocate -derivedDataPath build \
             -destination 'generic/platform=iOS Simulator' CODE_SIGNING_ALLOWED=NO | tail -50
           exit ${PIPESTATUS[0]}
+      - name: Comprobar lo que pide Apple para publicar
+        run: |
+          APP=build/Build/Products/Debug-iphonesimulator/Enfocate.app
+          ls "$APP" "$APP/PlugIns"
+          test -f "$APP/Assets.car" || { echo "Falta el icono"; exit 1; }
+          for b in "$APP" "$APP"/PlugIns/*.appex; do
+            test -f "$b/PrivacyInfo.xcprivacy" || { echo "Falta el manifiesto de privacidad en $b"; exit 1; }
+          done
+          test "$(ls -d "$APP"/PlugIns/*.appex | wc -l)" -eq 3 || { echo "Faltan extensiones"; exit 1; }
+          /usr/libexec/PlistBuddy -c 'Print :ITSAppUsesNonExemptEncryption' "$APP/Info.plist"
