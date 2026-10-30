@@ -80,6 +80,8 @@ try {
     exit 0
 } catch {
     Write-Host "Error: $($_.Exception.Message)" -ForegroundColor Red
-    Read-Host 'Presiona Enter para cerrar'
+    Write-Host $_.InvocationInfo.PositionMessage
+    # En una ventana normal, espera para que se pueda leer el error.
+    try { Read-Host 'Presiona Enter para cerrar' | Out-Null } catch { }
     exit 1
 }
