@@ -1,0 +1,99 @@
+# Proyecto de Xcode para iPhone. Se genera con XcodeGen: brew install xcodegen && xcodegen
+name: Enfocate
+options:
+  bundleIdPrefix: work.michaelnet
+  deploymentTarget:
+    iOS: "16.0"
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    MARKETING_VERSION: "0.1.0"
+    CURRENT_PROJECT_VERSION: "1"
+    DEVELOPMENT_TEAM: ""   # Tu Team ID de Apple Developer
+
+targets:
+  Enfocate:
+    type: application
+    platform: iOS
+    sources: [App, Compartido]
+    info:
+      path: App/Info.plist
+      properties:
+        CFBundleDisplayName: Enfócate pe causa
+        UILaunchScreen: {}
+        UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
+    entitlements:
+      path: App/Enfocate.entitlements
+      properties:
+        com.apple.developer.family-controls: true
+        com.apple.security.application-groups: [group.work.michaelnet.enfocate]
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: work.michaelnet.enfocate
+    dependencies:
+      - target: Monitor
+      - target: Escudo
+      - target: AccionEscudo
+
+  # Lo despierta iOS cuando empieza o termina un horario, o se llega a un límite de uso.
+  Monitor:
+    type: app-extension
+    platform: iOS
+    sources: [Monitor, Compartido]
+    info:
+      path: Monitor/Info.plist
+      properties:
+        CFBundleDisplayName: Enfócate pe causa
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.deviceactivity.monitor-extension
+          NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).Monitor
+    entitlements:
+      path: Monitor/Monitor.entitlements
+      properties:
+        com.apple.developer.family-controls: true
+        com.apple.security.application-groups: [group.work.michaelnet.enfocate]
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: work.michaelnet.enfocate.monitor
+
+  # Dibuja la pantalla que cubre una app bloqueada.
+  Escudo:
+    type: app-extension
+    platform: iOS
+    sources: [Escudo, Compartido]
+    info:
+      path: Escudo/Info.plist
+      properties:
+        CFBundleDisplayName: Enfócate pe causa
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.ManagedSettingsUI.shield-configuration-service
+          NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).Escudo
+    entitlements:
+      path: Escudo/Escudo.entitlements
+      properties:
+        com.apple.developer.family-controls: true
+        com.apple.security.application-groups: [group.work.michaelnet.enfocate]
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: work.michaelnet.enfocate.escudo
+
+  # Responde a los botones de esa pantalla: volver o usar un pase.
+  AccionEscudo:
+    type: app-extension
+    platform: iOS
+    sources: [AccionEscudo, Compartido]
+    info:
+      path: AccionEscudo/Info.plist
+      properties:
+        CFBundleDisplayName: Enfócate pe causa
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.ManagedSettings.shield-action-service
+          NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).AccionEscudo
+    entitlements:
+      path: AccionEscudo/AccionEscudo.entitlements
+      properties:
+        com.apple.developer.family-controls: true
+        com.apple.security.application-groups: [group.work.michaelnet.enfocate]
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: work.michaelnet.enfocate.accion-escudo

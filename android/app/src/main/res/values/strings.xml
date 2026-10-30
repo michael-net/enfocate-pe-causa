@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="descripcion_accesibilidad">Enfócate pe causa usa este permiso solo para saber cuándo abres una de las apps que elegiste y cerrarla durante un bloqueo. No puede leer la pantalla ni lo que escribes, y no tiene acceso a internet.</string>
+</resources>

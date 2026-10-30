@@ -1,0 +1,7 @@
+# Lo genera XcodeGen a partir de project.yml
+*.xcodeproj/
+*/Info.plist
+*/*.entitlements
+build/
+DerivedData/
+xcuserdata/

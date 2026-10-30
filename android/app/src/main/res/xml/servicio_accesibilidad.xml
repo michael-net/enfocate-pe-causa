@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Solo se entera de qué app pasa a primer plano, y solo de las que elegiste
+  (Guardian cambia packageNames al leer tu lista). No puede leer la pantalla.
+-->
+<accessibility-service xmlns:android="http://schemas.android.com/apk/res/android"
+    android:accessibilityEventTypes="typeWindowStateChanged"
+    android:accessibilityFeedbackType="feedbackGeneric"
+    android:canRetrieveWindowContent="false"
+    android:description="@string/descripcion_accesibilidad"
+    android:notificationTimeout="100"
+    android:packageNames="work.michaelnet.enfocate" />
