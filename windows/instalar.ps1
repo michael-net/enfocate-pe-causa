@@ -73,9 +73,14 @@ try {
     Start-Service $servicio
 
     # La app se abre sola al iniciar sesión, solo en tu cuenta.
-    $run = "Registry::HKEY_USERS\$Sid\Software\Microsoft\Windows\CurrentVersion\Run"
-    if (-not (Test-Path $run)) { New-Item $run -Force | Out-Null }
-    Set-ItemProperty $run -Name 'Enfocate pe causa' -Value "`"$destino\Enfocate.exe`""
+    $usuario = "Registry::HKEY_USERS\$Sid"
+    if (Test-Path $usuario) {
+        $run = "$usuario\Software\Microsoft\Windows\CurrentVersion\Run"
+        if (-not (Test-Path $run)) { New-Item $run -Force | Out-Null }
+        Set-ItemProperty $run -Name 'Enfocate pe causa' -Value "`"$destino\Enfocate.exe`""
+    } else {
+        Write-Host "No encontré tu cuenta: abre Enfocate.exe desde $destino al iniciar sesión."
+    }
     Write-Host 'Servicio instalado.'
     exit 0
 } catch {
