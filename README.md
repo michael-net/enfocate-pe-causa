@@ -1,5 +1,7 @@
 # Enfócate pe causa
 
+Creado por **Michael Net**.
+
 Una herramienta para dejar la costumbre de tener las redes sociales siempre a la mano.
 
 Bloquea los sitios y las apps que tú elijas durante sesiones que no puedes cancelar a medias. Vive en la barra de menú y solo muestra lo necesario: un icono y el tiempo que falta.
@@ -66,4 +68,10 @@ No funciona durante una sesión activa.
 
 ## Créditos
 
-Basado en [screen-block](https://github.com/ponchodelosrios98/screen-block), de Alfonso de los Rios. Licencia [MIT](LICENSE).
+**Enfócate pe causa** es un proyecto de **Michael Net** ([m@michaelnet.work](mailto:m@michaelnet.work)).
+
+Parte de [screen-block](https://github.com/ponchodelosrios98/screen-block), de Alfonso de los Rios, que aportó la base del bloqueo con `/etc/hosts` y las sesiones con candado.
+
+## Licencia
+
+[MIT](LICENSE). Puedes usar, modificar y distribuir este proyecto, siempre que conserves el aviso de licencia con los nombres de sus autores.
