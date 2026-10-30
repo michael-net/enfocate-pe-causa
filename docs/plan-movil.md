@@ -18,15 +18,16 @@ Igual que en la computadora, pero pensada para los momentos en que el celular ge
 |---|---|---|
 | **Mañana** | Al empezar el día, las redes sociales quedan bloqueadas | 45 minutos desde que empiezas a usar el celular |
 | **Noche** | Antes de dormir, las redes sociales quedan bloqueadas hasta una hora fija | De 22:00 a 6:00. Tú eliges las dos horas |
-| **Pase de 5 minutos** | En cada bloqueo de la mañana y de la noche, cada app bloqueada tiene su propio pase para revisarla | 5 min de uso por app, en cada bloqueo |
+| **Pases de 5 minutos** | Durante un bloqueo de la mañana o de la noche, un pase abre la app que elijas por 5 minutos | 2 pases al día |
 | **Límite diario** | Cada red social se puede usar como máximo este tiempo al día. Después queda bloqueada hasta medianoche | 15 min por app |
 | **Sesión de enfoque** | Bloquea todo lo que elijas. No se cancela, solo se extiende | 1 h, 1 h 30 min, 2 h o 3 h. Extender 30 min |
 
 - **Qué cuenta como red social:** la eliges tú. Se sugieren Instagram, TikTok, Facebook, X, YouTube, Snapchat, Threads y Reddit. WhatsApp y las apps de mensajes quedan fuera por defecto, como en la sesión automática de escritorio.
-- **El pase de 5 minutos es de cada app.** Usar el de Instagram no gasta el de TikTok. Siempre está disponible en los bloqueos de la mañana y de la noche, y se renueva en cada bloqueo.
-- **El pase se mide en uso real**, no en reloj. Si abres Instagram 2 minutos y lo cierras, te quedan 3 de ese pase.
-- **El pase no existe en las sesiones de enfoque**, que siguen sin poder negociarse, **ni después de llegar al límite diario** de esa app.
-- **El límite de 15 minutos** se acumula en todo el día, también durante los pases. Con los dos pases, cada app ya puede usarse 10 de esos 15 minutos en la mañana y la noche.
+- **Tienes 2 pases al día**, para la app que quieras. Puedes usar uno en la mañana y otro en la noche, o los dos en el mismo bloqueo. Se renuevan a medianoche.
+- **Un pase es para una app.** Al intentar abrir una red social bloqueada, la pantalla de bloqueo ofrece "Usar un pase (te quedan 2)". Se abre solo esa app.
+- **El pase se mide en uso real**, no en reloj. Si abres Instagram 2 minutos y lo cierras, puedes volver a entrar a Instagram durante los 3 minutos que quedan de ese pase.
+- **Los pases no existen en las sesiones de enfoque**, que siguen sin poder negociarse, **ni después de llegar al límite diario** de esa app.
+- **El límite de 15 minutos** se acumula en todo el día, también durante los pases.
 - **Lo que no se puede hacer no aparece**, como en escritorio: durante un bloqueo no hay botón para desactivarlo.
 
 ### Cuándo empieza "la mañana"
@@ -58,7 +59,7 @@ Cómo se arma cada regla:
 |---|---|
 | Mañana | Un *App Intent* "Empezar la mañana" que la automatización de Atajos ejecuta al despertar. Activa el escudo y un horario de 45 minutos que lo quita al terminar. Si no hay automatización, un horario fijo diario |
 | Noche | Un horario diario de `DeviceActivity` con hora fija de inicio y de fin, por ejemplo de 22:00 a 6:00, que pone y quita el escudo |
-| Pase de 5 minutos | El escudo tiene un botón "Usar 5 minutos". La extensión `ShieldAction` recibe la ficha de la app que se intentó abrir, le quita el escudo solo a ella y vigila un evento de 5 minutos de uso de esa app. Al llegar, la extensión `DeviceActivityMonitor` vuelve a ponerlo. Las fichas que ya usaron su pase en el bloqueo actual se guardan en el grupo compartido de la app, para no dar un segundo pase |
+| Pases de 5 minutos | El escudo tiene un botón "Usar un pase". La extensión `ShieldAction` recibe la ficha de la app que se intentó abrir, le quita el escudo solo a ella y vigila un evento de 5 minutos de uso de esa app. Al llegar, la extensión `DeviceActivityMonitor` vuelve a ponerlo. Los pases que quedan hoy se guardan en el grupo compartido de la app, al que acceden la app y sus extensiones |
 | Límite diario | Un horario de 0:00 a 23:59 con un evento de 15 minutos por app. Al llegar, se bloquea solo esa app hasta medianoche |
 | Sesión de enfoque | Escudo sobre lo elegido y un horario hasta la hora de fin. Extender mueve la hora de fin |
 
@@ -79,7 +80,7 @@ Esta es la mejor parte de iOS:
 - **La persona puede quitar el permiso** desde Ajustes > Tiempo de uso. Desde iOS 26.4, según reportes de otros desarrolladores, ese permiso se puede proteger con el código de Tiempo de uso, y conviene explicarlo en la app. Mismo principio que en escritorio: frena el impulso, no a alguien decidido.
 - **iOS no avisa del desbloqueo.** Por eso la mañana depende de Atajos o de un horario fijo.
 - **Los avisos de límite no son exactos.** Hay reportes de eventos que llegan antes o después de tiempo, también en iOS 26. Hay que comprobar el tiempo real antes de bloquear y probar en celulares reales.
-- **Los horarios de `DeviceActivity` duran mínimo unos 15 minutos**, según reportes de desarrolladores. Por eso el pase de 5 minutos usa un evento de uso dentro de un horario más largo, y no un horario de 5 minutos.
+- **Los horarios de `DeviceActivity` duran mínimo unos 15 minutos**, según reportes de desarrolladores. Por eso cada pase de 5 minutos usa un evento de uso dentro de un horario más largo, y no un horario de 5 minutos.
 
 ### Distribución
 
@@ -118,7 +119,7 @@ Cómo se arma cada regla:
 |---|---|
 | Mañana | El servicio escucha el desbloqueo. El primero después de que termina la noche inicia 45 minutos de bloqueo |
 | Noche | Se calcula con las horas fijas cada vez que se abre una red social. No hacen falta alarmas |
-| Pase de 5 minutos | La pantalla de bloqueo tiene el botón "Usar 5 minutos" para esa app. El uso se mide con `UsageStatsManager`. Se guarda qué apps ya usaron su pase en el bloqueo actual |
+| Pases de 5 minutos | La pantalla de bloqueo tiene el botón "Usar un pase" para esa app. El uso se mide con `UsageStatsManager`. Se guarda cuántos pases quedan hoy |
 | Límite diario | Al abrir una red social se consulta su uso de hoy con `UsageStatsManager`, que guarda el propio Android. Si ya pasó de 15 minutos, se bloquea. Si no, se programa una revisión para el momento en que llegue |
 | Sesión de enfoque | Una notificación con la cuenta regresiva y bloqueo de lo elegido hasta la hora de fin |
 
@@ -182,7 +183,7 @@ No se recomienda Flutter ni React Native: el núcleo son APIs nativas de cada si
 ## Decisiones tomadas
 
 - **La noche termina a una hora fija**, que eliges tú.
-- **El pase de 5 minutos es de cada app bloqueada**, y está disponible en cada bloqueo de la mañana y de la noche.
+- **Hay 2 pases al día** de 5 minutos cada uno, para la app que elijas, durante los bloqueos de la mañana y de la noche.
 
 ## Preguntas abiertas
 
