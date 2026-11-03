@@ -126,7 +126,7 @@ def main():
         for nombre, d in abiertos.items():
             for sitio, (url, _) in SITIOS.items():
                 r = abre(d, url, s)
-                if nombre == "firefox" and r == "abre" and s == CHEQUEOS[0]:
+                if nombre == "firefox" and r == "abre" and s in CHEQUEOS[:2]:
                     diagnosticar_firefox(d)
                 filas.append((nombre, "ya abierto", s, sitio, r))
                 print(f"  {s:>3}s {nombre} {sitio}: {r.upper() if r == 'abre' else r}")

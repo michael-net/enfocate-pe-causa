@@ -76,8 +76,9 @@ try {
     Set-ItemProperty "$ff\DNSOverHTTPS" -Name Enabled -Value 0 -Type DWord
     Set-ItemProperty "$ff\DNSOverHTTPS" -Name Locked -Value 1 -Type DWord
     # Firefox guarda las direcciones que ya consultó y usa HTTP/3, que mantiene conexiones abiertas por UDP.
-    # Sin eso, al empezar una sesión sigue entrando a los sitios que ya había visitado.
-    foreach ($p in @(@('network.dns.get-ttl', 0, 'boolean'), @('network.dnsCacheExpiration', 0, 'number'),
+    # Sin eso, al empezar una sesión sigue entrando a los sitios que ya había visitado. La caché queda
+    # en 1 segundo: con 0, Firefox usa su valor normal de 60.
+    foreach ($p in @(@('network.dns.get-ttl', 0, 'boolean'), @('network.dnsCacheExpiration', 1, 'number'),
                      @('network.dnsCacheExpirationGracePeriod', 0, 'number'), @('network.http.http3.enable', 0, 'boolean'))) {
         $k = "$ff\Preferences\$($p[0])"
         New-Item $k -Force | Out-Null
