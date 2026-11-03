@@ -44,6 +44,12 @@ jobs:
           for ($i = 0; $i -lt 30 -and -not (Select-String -Quiet '127.0.0.1 youtube.com' $hosts); $i++) { Start-Sleep 1 }
           Get-Content $hosts | Select-Object -Last 12
           Resolve-DnsName www.youtube.com -Type A -ErrorAction SilentlyContinue | Select-Object -First 1 | Format-Table Name, IPAddress
+          # Diagnóstico temporal: conexiones de Firefox después del corte.
+          Start-Sleep 2
+          $ff = @(Get-Process firefox -ErrorAction SilentlyContinue | ForEach-Object Id)
+          Get-NetTCPConnection -State Established -ErrorAction SilentlyContinue | Where-Object { $ff -contains $_.OwningProcess -and $_.RemotePort -in 80, 443 } |
+            Format-Table LocalAddress, RemoteAddress, RemotePort, OwningProcess -AutoSize | Out-String -Width 200 | Write-Host
+          Get-NetUDPEndpoint -ErrorAction SilentlyContinue | Where-Object { $ff -contains $_.OwningProcess } | Format-Table LocalAddress, LocalPort -AutoSize | Out-String | Write-Host
           '@ | Set-Content (Join-Path $env:RUNNER_TEMP 'iniciar.ps1')
       - name: Probar Chrome, Edge y Firefox
         shell: powershell
@@ -71,6 +77,10 @@ jobs:
           orden focus60
           for i in $(seq 30); do grep -q '127.0.0.1 youtube.com' /etc/hosts && break; sleep 1; done
           tail -12 /etc/hosts
+          # Diagnóstico temporal: procesos y conexiones de Safari y Firefox después del corte.
+          sleep 2
+          ps -axo pid,user,comm | grep -i -E 'webkit|safari|firefox' | grep -v grep
+          lsof -nP -iTCP -sTCP:ESTABLISHED 2>/dev/null | grep -i -E 'webkit|safari|firefox|networ' | head -30
           curl -sS -m 5 -o /dev/null -w 'curl youtube: %{remote_ip} %{http_code}\n' https://www.youtube.com || true
           SH
       - name: Probar Safari, Chrome, Edge y Firefox
