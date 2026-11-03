@@ -109,7 +109,8 @@ La app no se conecta a internet, no tiene cuentas ni analíticas, y no recopila 
 Es una herramienta para frenar el impulso, no un control parental.
 
 - **Quien tenga la contraseña de administrador puede saltarse el bloqueo**, editando el archivo `hosts`, deteniendo el servicio o cambiando la hora del sistema.
-- **DNS sobre HTTPS:** si un navegador lo tiene activado con un proveedor propio, puede ignorar el archivo `hosts`. Desactívalo en los ajustes del navegador, por ejemplo en Firefox.
+- **Firefox** trae su propio DNS cifrado (DNS sobre HTTPS), que ignora el archivo `hosts`. El instalador lo apaga con una política del sistema, para que Firefox use el DNS de tu computadora. Si Firefox estaba abierto al instalar, ciérralo y vuelve a abrirlo. Al desinstalar, la política se quita.
+- **Otros navegadores con DNS sobre HTTPS** y un proveedor propio también pueden ignorar el archivo `hosts`. Chrome, Edge, Brave y Safari sí lo respetan.
 - **Pestañas ya abiertas** pueden seguir funcionando un minuto, hasta que el navegador vuelva a consultar la dirección.
 - **Apps:** se cierran hasta 2 segundos después de abrirse, solo durante un bloqueo activo.
 - **Fuera de las sesiones** nada está bloqueado.
@@ -131,6 +132,7 @@ No funciona durante una sesión activa. Borra la app, el servicio y tus listas.
 
 - **El icono muestra un triángulo y "El servicio no responde".** Vuelve a ejecutar el instalador. Reinstalar no borra tus listas ni corta una sesión activa.
 - **Mac: "No se pudo compilar" después de actualizar macOS.** Reinstala las herramientas con `sudo rm -rf /Library/Developer/CommandLineTools && xcode-select --install`.
+- **Un sitio sigue abriendo en Firefox.** Instala la última versión de la app y reinicia Firefox. Para confirmar que la política está activa, abre `about:policies` en Firefox: debe aparecer `DNSOverHTTPS`.
 - **Un sitio sigue abriendo.** Revisa si entras con otro subdominio (`m.`, `web.`) y agrégalo, y revisa el DNS sobre HTTPS del navegador.
 - **No puedo iniciar una sesión.** Activa al menos un sitio o una app en **Qué bloquear…**.
 

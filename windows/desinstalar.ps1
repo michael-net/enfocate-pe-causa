@@ -43,6 +43,11 @@ try {
     if ($n -ne $t) { [IO.File]::WriteAllText($hosts, $n, [Text.Encoding]::Default) }
     ipconfig /flushdns | Out-Null
 
+    # La política de Firefox: se borra entera si la creó el instalador, si no, solo lo que agregó.
+    $ff = 'HKLM:\SOFTWARE\Policies\Mozilla\Firefox'
+    if (Test-Path (Join-Path $datos 'firefox-politica')) { Remove-Item $ff -Recurse -Force -ErrorAction SilentlyContinue }
+    else { Remove-Item "$ff\DNSOverHTTPS" -Recurse -Force -ErrorAction SilentlyContinue }
+
     Remove-Item $destino, $datos -Recurse -Force -ErrorAction SilentlyContinue
     Remove-ItemProperty "Registry::HKEY_USERS\$Sid\Software\Microsoft\Windows\CurrentVersion\Run" `
         -Name 'Enfocate pe causa' -ErrorAction SilentlyContinue

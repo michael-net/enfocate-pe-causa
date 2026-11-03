@@ -12,8 +12,9 @@ Todo lo que guarda está en tu computadora. En Mac:
 | `/Library/Application Support/focus/status` y `sesion.state` | Fase actual y hora en que termina |
 | `/Library/Application Support/focus/lock` | Hora de fin y lista bloqueada durante una sesión |
 | `/etc/hosts` | Los sitios bloqueados durante una sesión |
+| `/Library/Preferences/org.mozilla.firefox.plist` | La política que apaga el DNS cifrado de Firefox, para que respete el bloqueo |
 
-En Windows, lo mismo está en `C:\ProgramData\Enfocate\` (`sites`, `apps`, `auto-skip`, `status`, `sesion.state` y `owner`, el identificador de tu cuenta) y en `C:\Windows\System32\drivers\etc\hosts`.
+En Windows, lo mismo está en `C:\ProgramData\Enfocate\` (`sites`, `apps`, `auto-skip`, `status`, `sesion.state` y `owner`, el identificador de tu cuenta) y en `C:\Windows\System32\drivers\etc\hosts`. La política de Firefox está en el registro, en `HKLM\SOFTWARE\Policies\Mozilla\Firefox\DNSOverHTTPS`.
 
 No guarda tu historial, qué sitios intentas abrir, cuánto usas cada app ni estadísticas. `macos/uninstall.sh` y `windows\desinstalar.cmd` borran todo lo anterior.
 
@@ -22,6 +23,7 @@ Tu contraseña la pide el sistema (`sudo` en macOS, el aviso de administrador en
 ## Qué permisos usa
 
 - **Root en macOS, SYSTEM en Windows:** el servicio necesita editar el archivo `hosts` y cerrar apps. Es lo que impide saltarse una sesión, y por eso conviene leer el código antes de instalarlo.
+- **Política de Firefox:** apaga el DNS sobre HTTPS de Firefox. Así Firefox consulta las direcciones con el DNS de tu computadora, como Safari, Chrome o Edge. No cambia nada más del navegador ni ve lo que visitas.
 - **Cerrar apps:** solo durante un bloqueo, solo las de tu lista y solo procesos de tu usuario.
 
 ## Límites

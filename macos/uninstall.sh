@@ -16,6 +16,15 @@ rm -f "$HOME/Library/LaunchAgents/com.focus.sesion.widget.plist"
 sudo launchctl bootout system/com.focus.sesion 2>/dev/null || true
 sudo rm -f /Library/LaunchDaemons/com.focus.sesion.plist \
            /usr/local/libexec/focus-sesion /usr/local/libexec/focus-cli
+# La política de Firefox: se borra el archivo si lo creó el instalador, si no, solo lo que agregó.
+FFPOL="/Library/Preferences/org.mozilla.firefox"
+if [ -f "/Library/Application Support/focus/firefox-politica" ]; then
+  # defaults también limpia la copia en memoria del sistema, no solo el archivo.
+  sudo defaults delete "$FFPOL" 2>/dev/null || true
+  sudo rm -f "$FFPOL.plist"
+else
+  sudo defaults delete "$FFPOL" DNSOverHTTPS 2>/dev/null || true
+fi
 sudo rm -rf "/Library/Application Support/focus" /Users/Shared/focus-sesion
 sudo sed -i '' '/^# >>> focus block >>>$/,/^# <<< focus block <<<$/d' /etc/hosts
 sudo dscacheutil -flushcache 2>/dev/null || true

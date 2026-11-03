@@ -22,6 +22,9 @@ if (-not $Elevado) {
     Start-Process (Join-Path $destino 'Enfocate.exe') -ArgumentList '--sin-auto'
     Write-Host 'Listo. Busca el icono en la bandeja del sistema, abajo a la derecha.'
     Write-Host 'Si no lo ves, haz clic en la flecha ^ de la bandeja y arrástralo a la barra de tareas.'
+    if (Get-Process firefox -ErrorAction SilentlyContinue) {
+        Write-Host 'Cierra Firefox y vuelve a abrirlo para que respete el bloqueo.'
+    }
     exit 0
 }
 
@@ -64,6 +67,14 @@ try {
     # Por defecto, la sesión automática deja libre WhatsApp.
     $skip = Join-Path $datos 'auto-skip'
     if (-not (Test-Path $skip)) { Set-Content $skip 'WhatsApp' -Encoding ASCII }
+
+    # Firefox puede usar su propio DNS cifrado e ignorar hosts. Una política del sistema lo apaga
+    # para que use el DNS de Windows. Si no había políticas de Firefox, se anota para borrarlas al desinstalar.
+    $ff = 'HKLM:\SOFTWARE\Policies\Mozilla\Firefox'
+    if (-not (Test-Path $ff)) { New-Item (Join-Path $datos 'firefox-politica') -Force | Out-Null }
+    New-Item "$ff\DNSOverHTTPS" -Force | Out-Null
+    Set-ItemProperty "$ff\DNSOverHTTPS" -Name Enabled -Value 0 -Type DWord
+    Set-ItemProperty "$ff\DNSOverHTTPS" -Name Locked -Value 1 -Type DWord
 
     if (-not $existe) {
         New-Service -Name $servicio -BinaryPathName "`"$destino\EnfocateServicio.exe`"" -DisplayName 'Enfócate pe causa' `

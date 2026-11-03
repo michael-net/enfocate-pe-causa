@@ -45,6 +45,14 @@ if [ ! -f "$FDIR/lock" ]; then
   killall -HUP mDNSResponder 2>/dev/null || true
 fi
 
+# Firefox puede usar su propio DNS cifrado e ignorar /etc/hosts. Una política del sistema lo apaga
+# para que use el DNS de la Mac. Si el archivo de políticas no existía, se anota para borrarlo al desinstalar.
+FFPOL="/Library/Preferences/org.mozilla.firefox"
+[ -f "$FFPOL.plist" ] || touch "$FDIR/firefox-politica"
+defaults write "$FFPOL" EnterprisePoliciesEnabled -bool true
+defaults write "$FFPOL" DNSOverHTTPS -dict Enabled -bool false Locked -bool true
+chmod 644 "$FFPOL.plist"
+
 install -m 755 -o root -g wheel "$HERE/cli/focus" /usr/local/libexec/focus-cli
 sed "s#__UID__#$UID_OWNER#" "$HERE/daemon/focus-sesion-daemon.sh" > /usr/local/libexec/focus-sesion
 chown root:wheel /usr/local/libexec/focus-sesion
