@@ -21,6 +21,7 @@ SITIOS = {
     "youtube.com": ("https://www.youtube.com/", "YouTube"),
 }
 CHEQUEOS = [5, 30, 70, 130, 250]
+DIAGNOSTICO = True
 
 
 def abrir(nombre):
@@ -55,6 +56,10 @@ def abre(d, url, n):
         if SITIOS_POR_URL[url] not in d.title:
             return "bloqueado"
         sw = d.execute_script("return !!(navigator.serviceWorker && navigator.serviceWorker.controller)")
+        if not sw and DIAGNOSTICO:
+            print("    navegación:", d.execute_script(
+                "const n = performance.getEntriesByType('navigation')[0] || {};"
+                " return [n.nextHopProtocol, n.transferSize, n.deliveryType, n.connectStart, n.domainLookupStart, n.domainLookupEnd]"))
         return "copia" if sw else "abre"
     except WebDriverException:
         return "bloqueado"
