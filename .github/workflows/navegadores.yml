@@ -1,0 +1,71 @@
+# Prueba el bloqueo en navegadores reales de macOS y Windows, con una sesión de enfoque activa.
+name: Navegadores
+
+on:
+  push:
+    paths: ['macos/**', 'windows/**', 'pruebas/**', '.github/workflows/navegadores.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
+      - run: pip install selenium
+      - name: Instalar
+        shell: powershell
+        run: |
+          $prueba = Join-Path $env:RUNNER_TEMP 'dueno'
+          Set-Content $prueba 'x'
+          $sid = (Get-Acl $prueba).GetOwner([Security.Principal.SecurityIdentifier]).Value
+          powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -File windows\instalar.ps1 -Sid $sid -Elevado
+          if ($LASTEXITCODE) { throw "El instalador falló ($LASTEXITCODE)" }
+          # Orden que empieza la sesión, la que usará la prueba.
+          @'
+          $datos = Join-Path $env:ProgramData 'Enfocate'
+          function Orden($c) {
+            $n = 'cmd-{0:D13}-{1:x8}' -f [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds(), (Get-Random)
+            Set-Content (Join-Path $datos "ordenes\$n") $c -Encoding ASCII
+            Start-Sleep -Seconds 2
+          }
+          Orden 'site+ wikipedia.org'
+          Orden 'site+ youtube.com'
+          Orden 'focus60'
+          $hosts = "$env:WINDIR\System32\drivers\etc\hosts"
+          for ($i = 0; $i -lt 30 -and -not (Select-String -Quiet '127.0.0.1 youtube.com' $hosts); $i++) { Start-Sleep 1 }
+          Get-Content $hosts | Select-Object -Last 12
+          '@ | Set-Content (Join-Path $env:RUNNER_TEMP 'iniciar.ps1')
+      - name: Probar Chrome, Edge y Firefox
+        shell: powershell
+        run: python pruebas\navegadores.py "powershell -NoProfile -ExecutionPolicy Bypass -File $env:RUNNER_TEMP\iniciar.ps1" chrome edge firefox
+
+  macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
+      - run: pip install selenium
+      - name: Instalar
+        run: |
+          sudo bash macos/install-service.sh
+          sudo safaridriver --enable
+          cat > "$RUNNER_TEMP/iniciar.sh" <<'SH'
+          orden() {
+            n=$(printf 'cmd-%013d-%08x' "$(( $(date +%s) * 1000 ))" "$RANDOM$RANDOM")
+            echo "$1" > "/Users/Shared/focus-sesion/$n"
+            sleep 2
+          }
+          orden "site+ wikipedia.org"
+          orden "site+ youtube.com"
+          orden focus60
+          for i in $(seq 30); do grep -q '127.0.0.1 youtube.com' /etc/hosts && break; sleep 1; done
+          tail -12 /etc/hosts
+          SH
+      - name: Probar Safari, Chrome, Edge y Firefox
+        run: python pruebas/navegadores.py "bash $RUNNER_TEMP/iniciar.sh" safari chrome edge firefox
