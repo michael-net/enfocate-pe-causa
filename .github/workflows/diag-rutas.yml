@@ -27,9 +27,13 @@ jobs:
           PY
           python3 /tmp/con.py www.wikipedia.org "$IP" &
           until [ -f /tmp/listo ]; do sleep 0.2; done
-          echo "--- route -q -n add -host $IP 127.0.0.1 -reject"; sudo route -q -n add -host "$IP" 127.0.0.1 -reject; echo "salida $?"
-          echo "--- route -n add -host $IP 127.0.0.1 -reject"; sudo route -n add -host "$IP" 127.0.0.1 -reject; echo "salida $?"
-          netstat -rn -f inet | grep "$IP"
+          sudo pfctl -s info | head -2
+          sudo pfctl -f /etc/pf.conf 2>&1 | grep -v ALTQ | tail -3
+          echo "block return out quick proto { tcp udp } from any to $IP" | sudo pfctl -a com.apple/250.Enfocate -f - 2>&1 | grep -v ALTQ
+          TOK=$(sudo pfctl -E 2>&1 | sed -n 's/.*Token : \([0-9]*\).*/\1/p'); echo "token $TOK"
+          sudo pfctl -a com.apple/250.Enfocate -s rules
           touch /tmp/sigue; wait
-          echo "--- blackhole"; sudo route -n delete -host "$IP"; sudo route -n add -host "$IP" 127.0.0.1 -blackhole; echo "salida $?"; netstat -rn -f inet | grep "$IP"
           curl -sS -m 5 -o /dev/null -w "curl nueva conexion %{http_code}\n" --resolve "www.wikipedia.org:443:$IP" https://www.wikipedia.org/ || true
+          sudo pfctl -a com.apple/250.Enfocate -F all 2>&1 | grep -v ALTQ; sudo pfctl -X "$TOK" 2>&1 | tail -1
+          curl -sS -m 5 -o /dev/null -w "curl tras quitar %{http_code}\n" --resolve "www.wikipedia.org:443:$IP" https://www.wikipedia.org/ || true
+          sudo pfctl -s info | head -1
