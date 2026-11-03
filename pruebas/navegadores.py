@@ -48,13 +48,16 @@ def abrir(nombre):
 
 
 def abre(d, url, n):
-    """True si la página real cargó."""
+    """"abre", "bloqueado" o "copia": la página la dio el service worker del sitio, sin internet."""
     try:
         d.get(f"{url}?prueba={n}")
         time.sleep(1)
-        return SITIOS_POR_URL[url] in d.title
+        if SITIOS_POR_URL[url] not in d.title:
+            return "bloqueado"
+        sw = d.execute_script("return !!(navigator.serviceWorker && navigator.serviceWorker.controller)")
+        return "copia" if sw else "abre"
     except WebDriverException:
-        return False
+        return "bloqueado"
 
 
 SITIOS_POR_URL = {url: titulo for url, titulo in SITIOS.values()}
@@ -74,15 +77,17 @@ def main():
         d = abiertos["firefox"]
         with d.context(d.CONTEXT_CHROME):
             print("Firefox:", d.execute_script(
-                "return {trr: Services.prefs.getIntPref('network.trr.mode'),"
-                " politicas: Services.policies.status, activas: Object.keys(Services.policies.getActivePolicies() || {})}"))
+                "const p = Services.prefs; return {trr: p.getIntPref('network.trr.mode'),"
+                " cache: p.getIntPref('network.dnsCacheExpiration'), gracia: p.getIntPref('network.dnsCacheExpirationGracePeriod'),"
+                " http3: p.getBoolPref('network.http.http3.enable'), bloqueada: p.prefIsLocked('network.http.http3.enable'),"
+                " activas: Object.keys(Services.policies.getActivePolicies() || {})}"))
 
     print("Antes de la sesión:")
     for nombre, d in abiertos.items():
         for sitio, (url, _) in SITIOS.items():
-            ok = abre(d, url, 0)
-            print(f"  {nombre} {sitio}: {'abre' if ok else 'NO ABRE'}")
-            if not ok:
+            r = abre(d, url, 0)
+            print(f"  {nombre} {sitio}: {r}")
+            if r == "bloqueado":
                 print(f"    título: {d.title!r}")
 
     subprocess.run(iniciar, shell=True, check=True)
@@ -93,9 +98,9 @@ def main():
         time.sleep(max(0, t0 + s - time.time()))
         for nombre, d in abiertos.items():
             for sitio, (url, _) in SITIOS.items():
-                ok = abre(d, url, s)
-                filas.append((nombre, "ya abierto", s, sitio, ok))
-                print(f"  {s:>3}s {nombre} {sitio}: {'ABRE' if ok else 'bloqueado'}")
+                r = abre(d, url, s)
+                filas.append((nombre, "ya abierto", s, sitio, r))
+                print(f"  {s:>3}s {nombre} {sitio}: {r.upper() if r == 'abre' else r}")
 
     for d in abiertos.values():
         d.quit()
@@ -104,19 +109,24 @@ def main():
     for nombre in abiertos:
         d = abrir(nombre)
         for sitio, (url, _) in SITIOS.items():
-            ok = abre(d, url, "nuevo")
-            filas.append((nombre, "abierto en la sesión", None, sitio, ok))
-            print(f"  nuevo {nombre} {sitio}: {'ABRE' if ok else 'bloqueado'}")
+            r = abre(d, url, "nuevo")
+            filas.append((nombre, "abierto en la sesión", None, sitio, r))
+            print(f"  nuevo {nombre} {sitio}: {r.upper() if r == 'abre' else r}")
         d.quit()
 
     resumen = ["| Navegador | Caso | Segundos | Sitio | Resultado |", "|---|---|---|---|---|"]
-    for nombre, caso, s, sitio, ok in filas:
-        resumen.append(f"| {nombre} | {caso} | {s if s is not None else ''} | {sitio} | {'**abre**' if ok else 'bloqueado'} |")
+    nombres_r = {"abre": "**abre**", "bloqueado": "bloqueado", "copia": "solo la copia guardada, sin internet"}
+    for nombre, caso, s, sitio, r in filas:
+        resumen.append(f"| {nombre} | {caso} | {s if s is not None else ''} | {sitio} | {nombres_r[r]} |")
     texto = "\n".join(resumen)
+    fallas = [f for f in filas if f[4] == "abre"]
     print(texto)
     if os.environ.get("GITHUB_STEP_SUMMARY"):
         with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as f:
             f.write(f"## {sys.platform}\n\n{texto}\n\n")
+    if fallas:
+        print(f"{len(fallas)} veces un sitio bloqueado abrió.")
+        sys.exit(1)
 
 
 if __name__ == "__main__":

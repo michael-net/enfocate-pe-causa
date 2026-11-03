@@ -268,6 +268,8 @@ namespace Enfocate
                 File.WriteAllText(Rutas.Hosts, texto, Encoding.Default);
                 if ((attrs & FileAttributes.ReadOnly) != 0) File.SetAttributes(Rutas.Hosts, attrs);
                 try { DnsFlushResolverCache(); } catch { }
+                // Lo que se acaba de bloquear no debe seguir abierto en el navegador.
+                if (sitios.Count > 0) Conexiones.Cortar();
             }
             catch { }
         }

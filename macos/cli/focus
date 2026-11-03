@@ -154,8 +154,22 @@ apply() {
   echo "Actualizando $HOSTS (puede pedirte la contraseña)..."
   sudo cp "$tmp" "$HOSTS"
   rm -f "$tmp"
+  # Con -HUP macOS a veces no vuelve a leer /etc/hosts. Reiniciar mDNSResponder sí lo obliga.
   sudo dscacheutil -flushcache 2>/dev/null || true
-  sudo killall -HUP mDNSResponder 2>/dev/null || true
+  sudo killall mDNSResponder 2>/dev/null || true
+  [ -n "$sites" ] && cortar_conexiones
+}
+
+# /etc/hosts solo afecta a las conexiones nuevas. Los navegadores reutilizan las que ya tenían
+# abiertas, así que se reinicia su proceso de red: lo vuelven a abrir solos, sin cerrar pestañas.
+cortar_conexiones() {
+  local u
+  u="$(stat -f %u /dev/console)"
+  [ "$u" != 0 ] || return 0
+  # Chrome, Edge, Brave, Opera, Vivaldi, Arc
+  sudo pkill -U "$u" -f 'utility-sub-type=network.mojom.NetworkService' 2>/dev/null || true
+  # Safari
+  sudo pkill -U "$u" -x com.apple.WebKit.Networking 2>/dev/null || true
 }
 
 # ---- installing the enforcement daemon ------------------------------------
@@ -203,8 +217,17 @@ write_block() { # arg: newline-separated sites ("" clears the block)
   fi
   if ! cmp -s "$tmp" "$HOSTS"; then
     cp "$tmp" "$HOSTS"
+    # Con -HUP macOS a veces no vuelve a leer /etc/hosts. Reiniciar mDNSResponder sí lo obliga.
     dscacheutil -flushcache 2>/dev/null || true
-    killall -HUP mDNSResponder 2>/dev/null || true
+    killall mDNSResponder 2>/dev/null || true
+    # Los navegadores reutilizan conexiones abiertas: se reinicia su proceso de red.
+    if [ -n "$sites" ]; then
+      u="$(stat -f %u /dev/console)"
+      if [ "$u" != 0 ]; then
+        pkill -U "$u" -f 'utility-sub-type=network.mojom.NetworkService' 2>/dev/null
+        pkill -U "$u" -x com.apple.WebKit.Networking 2>/dev/null
+      fi
+    fi
   fi
   rm -f "$tmp"
 }

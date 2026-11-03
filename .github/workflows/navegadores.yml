@@ -43,7 +43,7 @@ jobs:
           $hosts = "$env:WINDIR\System32\drivers\etc\hosts"
           for ($i = 0; $i -lt 30 -and -not (Select-String -Quiet '127.0.0.1 youtube.com' $hosts); $i++) { Start-Sleep 1 }
           Get-Content $hosts | Select-Object -Last 12
-          & "$env:GITHUB_WORKSPACE\pruebas\cortar-win.ps1"
+          Resolve-DnsName www.youtube.com -Type A -ErrorAction SilentlyContinue | Select-Object -First 1 | Format-Table Name, IPAddress
           '@ | Set-Content (Join-Path $env:RUNNER_TEMP 'iniciar.ps1')
       - name: Probar Chrome, Edge y Firefox
         shell: powershell
@@ -71,11 +71,7 @@ jobs:
           orden focus60
           for i in $(seq 30); do grep -q '127.0.0.1 youtube.com' /etc/hosts && break; sleep 1; done
           tail -12 /etc/hosts
-          bash "$GITHUB_WORKSPACE/pruebas/cortar-mac.sh"
-          dscacheutil -q host -a name www.youtube.com
           curl -sS -m 5 -o /dev/null -w 'curl youtube: %{remote_ip} %{http_code}\n' https://www.youtube.com || true
-          scutil --dns | grep -E 'resolver|nameserver|flags' | head -12
-          sw_vers
           SH
       - name: Probar Safari, Chrome, Edge y Firefox
         run: python pruebas/navegadores.py "bash $RUNNER_TEMP/iniciar.sh" safari chrome edge firefox

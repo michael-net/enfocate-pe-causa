@@ -27,6 +27,8 @@ jobs:
           [ "$(/usr/libexec/PlistBuddy -c 'Print :DNSOverHTTPS:Enabled' "$P")" = false ]
           [ "$(/usr/libexec/PlistBuddy -c 'Print :DNSOverHTTPS:Locked' "$P")" = true ]
           [ "$(/usr/libexec/PlistBuddy -c 'Print :EnterprisePoliciesEnabled' "$P")" = true ]
+          [ "$(/usr/libexec/PlistBuddy -c 'Print :Preferences:network.http.http3.enable:Value' "$P")" = false ]
+          [ "$(/usr/libexec/PlistBuddy -c 'Print :Preferences:network.dnsCacheExpiration:Status' "$P")" = locked ]
           bash macos/uninstall.sh
           [ ! -e "$P" ] || { echo "La desinstalación dejó la política de Firefox"; exit 1; }
 
@@ -59,6 +61,8 @@ jobs:
           if (-not (Test-Path "$env:ProgramFiles\Enf*cate pe causa\Enfocate.exe")) { throw 'Falta la app' }
           $doh = Get-ItemProperty 'HKLM:\SOFTWARE\Policies\Mozilla\Firefox\DNSOverHTTPS'
           if ($doh.Enabled -ne 0 -or $doh.Locked -ne 1) { throw 'Falta la política de Firefox' }
+          $h3 = Get-ItemProperty 'HKLM:\SOFTWARE\Policies\Mozilla\Firefox\Preferences\network.http.http3.enable'
+          if ($h3.Value -ne 0 -or $h3.Type -ne 'boolean' -or $h3.Status -ne 'locked') { throw 'Falta la preferencia de Firefox' }
           Orden 'site+ example.com'
           if ((Get-Content (Join-Path $datos 'sites')) -notcontains 'example.com') { throw 'No se agregó el sitio' }
           Orden 'focus60'

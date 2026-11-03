@@ -24,9 +24,14 @@ if [ -f "/Library/Application Support/focus/firefox-politica" ]; then
   sudo rm -f "$FFPOL.plist"
 else
   sudo defaults delete "$FFPOL" DNSOverHTTPS 2>/dev/null || true
+  sudo defaults delete "$FFPOL" Preferences 2>/dev/null || true
 fi
 sudo rm -rf "/Library/Application Support/focus" /Users/Shared/focus-sesion
-sudo sed -i '' '/^# >>> focus block >>>$/,/^# <<< focus block <<<$/d' /etc/hosts
+# Se escribe sobre el mismo archivo: si se reemplaza, macOS deja de notar los cambios en /etc/hosts.
+T="$(mktemp)"
+sed '/^# >>> focus block >>>$/,/^# <<< focus block <<<$/d' /etc/hosts > "$T"
+cmp -s "$T" /etc/hosts || sudo tee /etc/hosts < "$T" > /dev/null
+rm -f "$T"
 sudo dscacheutil -flushcache 2>/dev/null || true
-sudo killall -HUP mDNSResponder 2>/dev/null || true
+sudo killall mDNSResponder 2>/dev/null || true
 echo "Desinstalado. No queda ningún dato de la app en tu Mac."

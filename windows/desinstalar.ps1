@@ -46,7 +46,12 @@ try {
     # La política de Firefox: se borra entera si la creó el instalador, si no, solo lo que agregó.
     $ff = 'HKLM:\SOFTWARE\Policies\Mozilla\Firefox'
     if (Test-Path (Join-Path $datos 'firefox-politica')) { Remove-Item $ff -Recurse -Force -ErrorAction SilentlyContinue }
-    else { Remove-Item "$ff\DNSOverHTTPS" -Recurse -Force -ErrorAction SilentlyContinue }
+    else {
+        Remove-Item "$ff\DNSOverHTTPS" -Recurse -Force -ErrorAction SilentlyContinue
+        foreach ($n in 'network.dnsCacheExpiration', 'network.dnsCacheExpirationGracePeriod', 'network.http.http3.enable') {
+            Remove-Item "$ff\Preferences\$n" -Recurse -Force -ErrorAction SilentlyContinue
+        }
+    }
 
     Remove-Item $destino, $datos -Recurse -Force -ErrorAction SilentlyContinue
     Remove-ItemProperty "Registry::HKEY_USERS\$Sid\Software\Microsoft\Windows\CurrentVersion\Run" `

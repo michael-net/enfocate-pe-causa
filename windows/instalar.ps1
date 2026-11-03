@@ -42,7 +42,7 @@ try {
         /r:System.Windows.Forms.dll /r:System.Drawing.dll "$aqui\Comun.cs" "$aqui\app\Bandeja.cs"
     if ($LASTEXITCODE) { throw 'No se pudo compilar la app.' }
     & $csc /nologo /codepage:65001 /optimize /target:exe "/out:$tmp\EnfocateServicio.exe" `
-        /r:System.ServiceProcess.dll "$aqui\Comun.cs" "$aqui\servicio\Servicio.cs"
+        /r:System.ServiceProcess.dll /r:System.Management.dll "$aqui\Comun.cs" "$aqui\servicio\Servicio.cs" "$aqui\servicio\Conexiones.cs"
     if ($LASTEXITCODE) { throw 'No se pudo compilar el servicio.' }
 
     # Una versión anterior: se detiene para reemplazarla. Una sesión activa sigue al volver a arrancar.
@@ -75,6 +75,16 @@ try {
     New-Item "$ff\DNSOverHTTPS" -Force | Out-Null
     Set-ItemProperty "$ff\DNSOverHTTPS" -Name Enabled -Value 0 -Type DWord
     Set-ItemProperty "$ff\DNSOverHTTPS" -Name Locked -Value 1 -Type DWord
+    # Firefox guarda direcciones 2 minutos y usa HTTP/3, que mantiene conexiones abiertas por UDP.
+    # Sin eso, al empezar una sesión sigue entrando a los sitios que ya había visitado.
+    foreach ($p in @(@('network.dnsCacheExpiration', 0, 'number'), @('network.dnsCacheExpirationGracePeriod', 0, 'number'),
+                     @('network.http.http3.enable', 0, 'boolean'))) {
+        $k = "$ff\Preferences\$($p[0])"
+        New-Item $k -Force | Out-Null
+        Set-ItemProperty $k -Name Value -Value $p[1] -Type DWord
+        Set-ItemProperty $k -Name Type -Value $p[2]
+        Set-ItemProperty $k -Name Status -Value 'locked'
+    }
 
     if (-not $existe) {
         New-Service -Name $servicio -BinaryPathName "`"$destino\EnfocateServicio.exe`"" -DisplayName 'Enfócate pe causa' `
