@@ -18,7 +18,7 @@ from selenium.common.exceptions import WebDriverException
 # URL y el título que tiene la página de verdad. Las páginas de error no lo tienen.
 SITIOS = {
     "wikipedia.org": ("https://www.wikipedia.org/", "Wikipedia"),
-    "youtube.com": ("https://www.youtube.com/", "YouTube"),
+    "github.com": ("https://github.com/", "GitHub"),
 }
 CHEQUEOS = [5, 30, 70, 130, 250]
 
@@ -67,6 +67,28 @@ def abre(d, url, n):
 SITIOS_POR_URL = {url: titulo for url, titulo in SITIOS.values()}
 
 
+def diagnosticar_firefox(d):
+    """Diagnóstico temporal: qué dirección y qué conexión usa Firefox."""
+    with d.context(d.CONTEXT_CHROME):
+        d.set_script_timeout(20)
+        print("    firefox por dentro:", d.execute_async_script("""
+            const listo = arguments[arguments.length - 1];
+            const dash = Cc["@mozilla.org/network/dashboard;1"].getService(Ci.nsIDashboard);
+            const sitio = x => /wikipedia|github|wikimedia/.test(JSON.stringify(x));
+            dash.requestDNSInfo(dns => dash.requestHttpConnections(http => {
+              Services.dns.asyncResolve("www.wikipedia.org", Ci.nsIDNSService.RESOLVE_TYPE_DEFAULT,
+                Ci.nsIDNSService.RESOLVE_BYPASS_CACHE, null, {
+                  onLookupComplete(req, rec, status) {
+                    let ips = [];
+                    try { rec.QueryInterface(Ci.nsIDNSAddrRecord); while (rec.hasMore()) ips.push(rec.getNextAddrAsString()); } catch (e) {}
+                    listo({ resolver: [status, ips], dns: (dns.entries || []).filter(sitio),
+                            conexiones: (http.connections || []).filter(sitio) });
+                  }
+                }, Services.tm.mainThread, {});
+            }));
+        """))
+
+
 def main():
     iniciar, nombres = sys.argv[1], sys.argv[2:]
     filas = []
@@ -104,6 +126,8 @@ def main():
         for nombre, d in abiertos.items():
             for sitio, (url, _) in SITIOS.items():
                 r = abre(d, url, s)
+                if nombre == "firefox" and r == "abre" and s == CHEQUEOS[0]:
+                    diagnosticar_firefox(d)
                 filas.append((nombre, "ya abierto", s, sitio, r))
                 print(f"  {s:>3}s {nombre} {sitio}: {r.upper() if r == 'abre' else r}")
 

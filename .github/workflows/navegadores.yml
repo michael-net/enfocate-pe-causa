@@ -38,10 +38,10 @@ jobs:
             Start-Sleep -Seconds 2
           }
           Orden 'site+ wikipedia.org'
-          Orden 'site+ youtube.com'
+          Orden 'site+ github.com'
           Orden 'focus60'
           $hosts = "$env:WINDIR\System32\drivers\etc\hosts"
-          for ($i = 0; $i -lt 30 -and -not (Select-String -Quiet '127.0.0.1 youtube.com' $hosts); $i++) { Start-Sleep 1 }
+          for ($i = 0; $i -lt 30 -and -not (Select-String -Quiet '127.0.0.1 github.com' $hosts); $i++) { Start-Sleep 1 }
           Get-Content $hosts | Select-Object -Last 12
           Resolve-DnsName www.youtube.com -Type A -ErrorAction SilentlyContinue | Select-Object -First 1 | Format-Table Name, IPAddress
           # Diagnóstico temporal: conexiones de Firefox después del corte.
@@ -72,9 +72,9 @@ jobs:
             sleep 2
           }
           orden "site+ wikipedia.org"
-          orden "site+ youtube.com"
+          orden "site+ github.com"
           orden focus60
-          for i in $(seq 30); do grep -q '127.0.0.1 youtube.com' /etc/hosts && break; sleep 1; done
+          for i in $(seq 30); do grep -q '127.0.0.1 github.com' /etc/hosts && break; sleep 1; done
           tail -12 /etc/hosts
           # Diagnóstico temporal: procesos y conexiones de Safari y Firefox después del corte.
           sleep 2
