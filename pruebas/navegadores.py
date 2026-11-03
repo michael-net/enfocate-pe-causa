@@ -80,6 +80,7 @@ def main():
                 "const p = Services.prefs; return {trr: p.getIntPref('network.trr.mode'),"
                 " cache: p.getIntPref('network.dnsCacheExpiration'), gracia: p.getIntPref('network.dnsCacheExpirationGracePeriod'),"
                 " http3: p.getBoolPref('network.http.http3.enable'), bloqueada: p.prefIsLocked('network.http.http3.enable'),"
+                " https: [p.getBoolPref('network.dns.native_https_query', null), p.getBoolPref('network.dns.native_https_query_win10', null), p.getBoolPref('network.dns.upgrade_with_https_rr', null), p.getBoolPref('network.dns.use_https_rr_as_altsvc', null)],"
                 " activas: Object.keys(Services.policies.getActivePolicies() || {})}"))
 
     print("Antes de la sesión:")

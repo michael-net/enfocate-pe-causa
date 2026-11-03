@@ -49,7 +49,7 @@ jobs:
           $ff = @(Get-Process firefox -ErrorAction SilentlyContinue | ForEach-Object Id)
           Get-NetTCPConnection -State Established -ErrorAction SilentlyContinue | Where-Object { $ff -contains $_.OwningProcess -and $_.RemotePort -in 80, 443 } |
             Format-Table LocalAddress, RemoteAddress, RemotePort, OwningProcess -AutoSize | Out-String -Width 200 | Write-Host
-          Get-NetUDPEndpoint -ErrorAction SilentlyContinue | Where-Object { $ff -contains $_.OwningProcess } | Format-Table LocalAddress, LocalPort -AutoSize | Out-String | Write-Host
+          Resolve-DnsName www.wikipedia.org -Type 65 -ErrorAction SilentlyContinue | Out-String -Width 200 | Write-Host
           '@ | Set-Content (Join-Path $env:RUNNER_TEMP 'iniciar.ps1')
       - name: Probar Chrome, Edge y Firefox
         shell: powershell
@@ -80,7 +80,8 @@ jobs:
           # Diagnóstico temporal: procesos y conexiones de Safari y Firefox después del corte.
           sleep 2
           ps -axo pid,user,comm | grep -i -E 'webkit|safari|firefox' | grep -v grep
-          lsof -nP -iTCP -sTCP:ESTABLISHED 2>/dev/null | grep -i -E 'webkit|safari|firefox|networ' | head -30
+          lsof -nP -iTCP -sTCP:ESTABLISHED 2>/dev/null | grep -i -E 'webkit|networ' | head -10
+          dig +short www.wikipedia.org HTTPS
           curl -sS -m 5 -o /dev/null -w 'curl youtube: %{remote_ip} %{http_code}\n' https://www.youtube.com || true
           SH
       - name: Probar Safari, Chrome, Edge y Firefox
