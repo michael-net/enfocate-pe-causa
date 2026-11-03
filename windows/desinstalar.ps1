@@ -42,6 +42,7 @@ try {
     $n = [regex]::Replace($t, '(?ms)^# >>> focus block >>>\r?\n.*?^# <<< focus block <<<\r?\n?', '')
     if ($n -ne $t) { [IO.File]::WriteAllText($hosts, $n, [Text.Encoding]::Default) }
     ipconfig /flushdns | Out-Null
+    netsh advfirewall firewall delete rule name="Enfocate pe causa: corte" | Out-Null
 
     # La política de Firefox: se borra entera si la creó el instalador, si no, solo lo que agregó.
     $ff = 'HKLM:\SOFTWARE\Policies\Mozilla\Firefox'

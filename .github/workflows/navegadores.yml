@@ -43,7 +43,8 @@ jobs:
           $hosts = "$env:WINDIR\System32\drivers\etc\hosts"
           for ($i = 0; $i -lt 30 -and -not (Select-String -Quiet '127.0.0.1 github.com' $hosts); $i++) { Start-Sleep 1 }
           Get-Content $hosts | Select-Object -Last 12
-          Resolve-DnsName www.youtube.com -Type A -ErrorAction SilentlyContinue | Select-Object -First 1 | Format-Table Name, IPAddress
+          Start-Sleep 4
+          netsh advfirewall firewall show rule name="Enfocate pe causa: corte" | Select-String 'RemoteIP|Action'
           # Diagnóstico temporal: conexiones de Firefox después del corte.
           Start-Sleep 2
           $ff = @(Get-Process firefox -ErrorAction SilentlyContinue | ForEach-Object Id)
@@ -80,9 +81,7 @@ jobs:
           sleep 2
           ps -axo pid,user,comm | grep -i -E 'webkit|safari|firefox' | grep -v grep
           sleep 8
-          echo "rutas cortadas:"; cat "/Library/Application Support/focus/rutas" 2>/dev/null
-          netstat -rn -f inet | grep -E 'R|Flags' | head
-          dig +short +time=2 +tries=1 wikipedia.org A www.wikipedia.org A
+          echo "pf:"; sudo pfctl -a com.apple/250.Enfocate -s rules 2>/dev/null; sudo pfctl -s info 2>/dev/null | head -1
           lsof -nP -iTCP -sTCP:ESTABLISHED -a -c firefox 2>/dev/null | grep -E '198\.35|208\.80|140\.82' 
           curl -sS -m 5 -o /dev/null -w 'curl youtube: %{remote_ip} %{http_code}\n' https://www.youtube.com || true
           SH

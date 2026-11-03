@@ -1,8 +1,11 @@
 // Corta las conexiones que los navegadores ya tenían abiertas. El archivo hosts solo
 // afecta a las conexiones nuevas: sin esto, una pestaña abierta sigue funcionando.
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
+using System.Linq;
 using System.Management;
+using System.Net;
 using System.Runtime.InteropServices;
 
 namespace Enfocate
@@ -18,7 +21,45 @@ namespace Enfocate
         public static void Cortar()
         {
             try { ReiniciarRedDeChromium(); } catch { }
+            CortarFirefox();
+        }
+
+        public static void CortarFirefox()
+        {
             try { CortarTcp(); } catch { }
+        }
+
+        const string Regla = "Enfocate pe causa: corte";
+
+        // Direcciones reales de los sitios. Se consultan antes de escribir hosts, que después las cambia.
+        public static List<string> Direcciones(List<string> sitios)
+        {
+            var ips = new HashSet<string>();
+            foreach (var s in sitios)
+                foreach (var nombre in new[] { s, "www." + s })
+                    try { foreach (var ip in Dns.GetHostAddresses(nombre)) if (!IPAddress.IsLoopback(ip)) ips.Add(ip.ToString()); }
+                    catch { }
+            return ips.ToList();
+        }
+
+        // Firefox guarda la dirección real hasta 60 s: sin esto, vuelve a conectarse después del corte.
+        public static void BloquearDirecciones(List<string> ips)
+        {
+            QuitarBloqueo();
+            if (ips.Count == 0) return;
+            Netsh("advfirewall firewall add rule name=\"" + Regla + "\" dir=out action=block enable=yes remoteip=" + string.Join(",", ips));
+        }
+
+        public static void QuitarBloqueo() { Netsh("advfirewall firewall delete rule name=\"" + Regla + "\""); }
+
+        static void Netsh(string args)
+        {
+            try
+            {
+                var i = new ProcessStartInfo("netsh.exe", args) { CreateNoWindow = true, UseShellExecute = false };
+                using (var p = Process.Start(i)) p.WaitForExit(10000);
+            }
+            catch { }
         }
 
         static void ReiniciarRedDeChromium()
