@@ -39,6 +39,7 @@ jobs:
           $hosts = "$env:WINDIR\System32\drivers\etc\hosts"
           for ($i = 0; $i -lt 30 -and -not (Select-String -Quiet '127.0.0.1 youtube.com' $hosts); $i++) { Start-Sleep 1 }
           Get-Content $hosts | Select-Object -Last 12
+          & "$env:GITHUB_WORKSPACE\pruebas\cortar-win.ps1"
           '@ | Set-Content (Join-Path $env:RUNNER_TEMP 'iniciar.ps1')
       - name: Probar Chrome, Edge y Firefox
         shell: powershell
@@ -66,6 +67,7 @@ jobs:
           orden focus60
           for i in $(seq 30); do grep -q '127.0.0.1 youtube.com' /etc/hosts && break; sleep 1; done
           tail -12 /etc/hosts
+          bash "$GITHUB_WORKSPACE/pruebas/cortar-mac.sh"
           SH
       - name: Probar Safari, Chrome, Edge y Firefox
         run: python pruebas/navegadores.py "bash $RUNNER_TEMP/iniciar.sh" safari chrome edge firefox

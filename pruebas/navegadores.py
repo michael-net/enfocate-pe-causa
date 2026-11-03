@@ -70,6 +70,13 @@ def main():
         except WebDriverException as e:
             print(f"{nombre}: no se pudo abrir ({e.msg})")
 
+    if "firefox" in abiertos:
+        d = abiertos["firefox"]
+        with d.context(d.CONTEXT_CHROME):
+            print("Firefox:", d.execute_script(
+                "return {trr: Services.prefs.getIntPref('network.trr.mode'),"
+                " politicas: Services.policies.status, activas: Object.keys(Services.policies.getActivePolicies() || {})}"))
+
     print("Antes de la sesión:")
     for nombre, d in abiertos.items():
         for sitio, (url, _) in SITIOS.items():
