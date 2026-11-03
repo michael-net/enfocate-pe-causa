@@ -37,7 +37,6 @@ def abrir(nombre):
     elif nombre == "firefox":
         o = webdriver.FirefoxOptions()
         o.add_argument("-headless")
-        o.add_argument("-remote-allow-system-access")
         o.page_load_strategy = "eager"
         d = webdriver.Firefox(options=o)
     elif nombre == "safari":
