@@ -1,0 +1,30 @@
+# Diagnóstico temporal: cómo responde macOS al archivo hosts.
+name: Diagnóstico hosts
+on:
+  push:
+    paths: ['.github/workflows/diag-hosts.yml']
+permissions:
+  contents: read
+jobs:
+  mac:
+    runs-on: macos-latest
+    steps:
+      - run: |
+          q() { echo "-- $1"; dscacheutil -q host -a name "$2" | grep -E 'ip' | head -2; curl -sS -m 5 -o /dev/null -w "curl %{remote_ip} %{http_code}\n" "https://$2/" 2>&1 | tail -1; python3 -c "import socket,sys;print('getaddrinfo',sorted({a[4][0] for a in socket.getaddrinfo(sys.argv[1],443)}))" "$2"; }
+          ls -l@ /etc/hosts /private/etc/hosts; cat /etc/hosts
+          q "sin resolver antes, sin hosts" example.net
+          echo "127.0.0.1 example.org" | sudo tee -a /etc/hosts >/dev/null
+          q "nunca resuelto, en hosts, sin vaciar caché" example.org
+          q "resuelto antes" example.com
+          echo "127.0.0.1 example.com" | sudo tee -a /etc/hosts >/dev/null
+          q "resuelto antes, en hosts, sin vaciar caché" example.com
+          sudo dscacheutil -flushcache; sudo killall -HUP mDNSResponder; sleep 1
+          q "después de HUP" example.com
+          sudo killall mDNSResponder; sleep 2
+          q "después de reiniciar mDNSResponder" example.com
+          echo "127.0.0.1 www.example.edu" | sudo tee -a /etc/hosts >/dev/null
+          sleep 1
+          q "nuevo con hosts, mDNSResponder reiniciado" www.example.edu
+          cat /etc/hosts
+          sudo log show --last 3m --predicate 'process == "mDNSResponder"' 2>/dev/null | grep -i -E 'hosts|etc' | tail -20
+          sw_vers
