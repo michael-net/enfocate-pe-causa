@@ -9,22 +9,23 @@ jobs:
   mac:
     runs-on: macos-latest
     steps:
+      - uses: actions/checkout@v4
       - run: |
-          q() { echo "-- $1"; dscacheutil -q host -a name "$2" | grep -E 'ip' | head -2; curl -sS -m 5 -o /dev/null -w "curl %{remote_ip} %{http_code}\n" "https://$2/" 2>&1 | tail -1; python3 -c "import socket,sys;print('getaddrinfo',sorted({a[4][0] for a in socket.getaddrinfo(sys.argv[1],443)}))" "$2"; }
-          ls -l@ /etc/hosts /private/etc/hosts; cat /etc/hosts
-          q "sin resolver antes, sin hosts" example.net
-          echo "127.0.0.1 example.org" | sudo tee -a /etc/hosts >/dev/null
-          q "nunca resuelto, en hosts, sin vaciar caché" example.org
-          q "resuelto antes" example.com
-          echo "127.0.0.1 example.com" | sudo tee -a /etc/hosts >/dev/null
-          q "resuelto antes, en hosts, sin vaciar caché" example.com
-          sudo dscacheutil -flushcache; sudo killall -HUP mDNSResponder; sleep 1
-          q "después de HUP" example.com
+          q() { echo "-- $1 $2"; curl -sS -m 5 -o /dev/null -w "curl %{remote_ip} %{http_code}\n" "https://$2/" 2>&1 | tail -1; python3 -c "import socket,sys;print('getaddrinfo',sorted({a[4][0] for a in socket.getaddrinfo(sys.argv[1],443)}))" "$2"; }
+          q antes www.youtube.com
+          q antes www.wikipedia.org
+          sudo bash macos/install-service.sh
+          orden() { n=$(printf 'cmd-%013d-%08x' "$(( $(date +%s) * 1000 ))" "$RANDOM$RANDOM"); echo "$1" > "/Users/Shared/focus-sesion/$n"; sleep 2; }
+          orden "site+ wikipedia.org"; orden "site+ youtube.com"; orden focus60
+          for i in $(seq 30); do grep -q '127.0.0.1 youtube.com' /etc/hosts && break; sleep 1; done
+          cat -v /etc/hosts; ls -li /etc/hosts
+          q sesion www.youtube.com
+          q sesion youtube.com
+          q sesion www.wikipedia.org
+          sleep 10
+          q "sesion+10s" www.youtube.com
+          cat /Library/Application\ Support/focus/lock
+          launchctl print system/com.focus.enforcer 2>&1 | grep -E 'state|pid' | head
           sudo killall mDNSResponder; sleep 2
-          q "después de reiniciar mDNSResponder" example.com
-          echo "127.0.0.1 www.example.edu" | sudo tee -a /etc/hosts >/dev/null
-          sleep 1
-          q "nuevo con hosts, mDNSResponder reiniciado" www.example.edu
-          cat /etc/hosts
-          sudo log show --last 3m --predicate 'process == "mDNSResponder"' 2>/dev/null | grep -i -E 'hosts|etc' | tail -20
-          sw_vers
+          q "tras reiniciar mDNSResponder" www.youtube.com
+          sudo log show --last 2m --predicate 'process == "mDNSResponder"' 2>/dev/null | grep -i -E 'hosts|file|etc' | tail -15
