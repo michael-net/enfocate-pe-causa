@@ -21,7 +21,6 @@ SITIOS = {
     "youtube.com": ("https://www.youtube.com/", "YouTube"),
 }
 CHEQUEOS = [5, 30, 70, 130, 250]
-DIAGNOSTICO = True
 
 
 def abrir(nombre):
@@ -49,18 +48,18 @@ def abrir(nombre):
 
 
 def abre(d, url, n):
-    """"abre", "bloqueado" o "copia": la página la dio el service worker del sitio, sin internet."""
+    """"abre", "bloqueado" o "copia": se ve una copia guardada, pero el sitio no responde."""
     try:
         d.get(f"{url}?prueba={n}")
         time.sleep(1)
         if SITIOS_POR_URL[url] not in d.title:
             return "bloqueado"
-        sw = d.execute_script("return !!(navigator.serviceWorker && navigator.serviceWorker.controller)")
-        if not sw and DIAGNOSTICO:
-            print("    navegación:", d.execute_script(
-                "const n = performance.getEntriesByType('navigation')[0] || {};"
-                " return [n.nextHopProtocol, n.transferSize, n.deliveryType, n.connectStart, n.domainLookupStart, n.domainLookupEnd]"))
-        return "copia" if sw else "abre"
+        # Lo que importa es si hay conexión con el sitio: así carga el contenido de una red social.
+        d.set_script_timeout(20)
+        conecta = d.execute_async_script(
+            "const listo = arguments[arguments.length - 1];"
+            " fetch('/favicon.ico?r=' + Math.random(), {cache: 'no-store'}).then(() => listo(true), () => listo(false));")
+        return "abre" if conecta else "copia"
     except WebDriverException:
         return "bloqueado"
 

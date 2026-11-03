@@ -79,8 +79,8 @@ jobs:
           # Diagnóstico temporal: procesos y conexiones de Safari y Firefox después del corte.
           sleep 2
           ps -axo pid,user,comm | grep -i -E 'webkit|safari|firefox' | grep -v grep
-          echo "consola: $(stat -f %u /dev/console)"; pgrep -lf 'WebKit.Networking.xpc/'
-          sudo pkill -U "$(stat -f %u /dev/console)" -f 'WebKit.Networking.xpc/'; echo "pkill: $?"; sleep 1; pgrep -lf 'WebKit.Networking.xpc/'
+          pgrep -lf 'WebKit.Networking.xpc/'
+          lsof -nP -iTCP -sTCP:ESTABLISHED -a -c firefox 2>/dev/null | grep -c ESTABLISHED
           curl -sS -m 5 -o /dev/null -w 'curl youtube: %{remote_ip} %{http_code}\n' https://www.youtube.com || true
           SH
       - name: Probar Safari, Chrome, Edge y Firefox

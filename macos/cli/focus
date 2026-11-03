@@ -168,8 +168,8 @@ cortar_conexiones() {
   [ "$u" != 0 ] || return 0
   # Chrome, Edge, Brave, Opera, Vivaldi, Arc
   sudo pkill -U "$u" -f 'utility-sub-type=network.mojom.NetworkService' 2>/dev/null || true
-  # Safari. Con -f: macOS recorta el nombre del proceso a 16 letras.
-  sudo pkill -U "$u" -f 'WebKit.Networking.xpc/' 2>/dev/null || true
+  # Safari. Con -f porque macOS recorta el nombre del proceso, y con -KILL porque ignora la señal normal.
+  sudo pkill -KILL -U "$u" -f 'WebKit.Networking.xpc/' 2>/dev/null || true
 }
 
 # ---- installing the enforcement daemon ------------------------------------
@@ -225,7 +225,7 @@ write_block() { # arg: newline-separated sites ("" clears the block)
       u="$(stat -f %u /dev/console)"
       if [ "$u" != 0 ]; then
         pkill -U "$u" -f 'utility-sub-type=network.mojom.NetworkService' 2>/dev/null
-        pkill -U "$u" -f 'WebKit.Networking.xpc/' 2>/dev/null
+        pkill -KILL -U "$u" -f 'WebKit.Networking.xpc/' 2>/dev/null
       fi
     fi
   fi
