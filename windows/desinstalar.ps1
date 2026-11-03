@@ -48,9 +48,10 @@ try {
     if (Test-Path (Join-Path $datos 'firefox-politica')) { Remove-Item $ff -Recurse -Force -ErrorAction SilentlyContinue }
     else {
         Remove-Item "$ff\DNSOverHTTPS" -Recurse -Force -ErrorAction SilentlyContinue
-        foreach ($n in 'network.dnsCacheExpiration', 'network.dnsCacheExpirationGracePeriod', 'network.http.http3.enable') {
+        foreach ($n in 'network.dns.get-ttl', 'network.dnsCacheExpiration', 'network.dnsCacheExpirationGracePeriod', 'network.http.http3.enable') {
             Remove-Item "$ff\Preferences\$n" -Recurse -Force -ErrorAction SilentlyContinue
         }
+        Remove-ItemProperty $ff -Name IPProtectionAvailable -ErrorAction SilentlyContinue
     }
 
     Remove-Item $destino, $datos -Recurse -Force -ErrorAction SilentlyContinue

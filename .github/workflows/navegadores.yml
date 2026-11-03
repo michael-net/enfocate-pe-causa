@@ -79,8 +79,8 @@ jobs:
           # Diagnóstico temporal: procesos y conexiones de Safari y Firefox después del corte.
           sleep 2
           ps -axo pid,user,comm | grep -i -E 'webkit|safari|firefox' | grep -v grep
-          pgrep -lf 'WebKit.Networking.xpc/'
-          lsof -nP -iTCP -sTCP:ESTABLISHED -a -c firefox 2>/dev/null | grep -c ESTABLISHED
+          sleep 3
+          echo "rutas cortadas:"; cat "/Library/Application Support/focus/rutas" 2>/dev/null
           curl -sS -m 5 -o /dev/null -w 'curl youtube: %{remote_ip} %{http_code}\n' https://www.youtube.com || true
           SH
       - name: Probar Safari, Chrome, Edge y Firefox

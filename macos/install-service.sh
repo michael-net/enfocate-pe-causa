@@ -55,10 +55,12 @@ FFPOL="/Library/Preferences/org.mozilla.firefox"
 [ -f "$FFPOL.plist" ] || touch "$FDIR/firefox-politica"
 defaults write "$FFPOL" EnterprisePoliciesEnabled -bool true
 defaults write "$FFPOL" DNSOverHTTPS -dict Enabled -bool false Locked -bool true
-# Firefox guarda direcciones 2 minutos y usa HTTP/3, que mantiene conexiones abiertas por UDP.
+# Firefox guarda las direcciones que ya consultó y usa HTTP/3, que mantiene conexiones abiertas por UDP.
 # Sin eso, al empezar una sesión sigue entrando a los sitios que ya había visitado.
 locked() { echo "<key>$1</key><dict><key>Value</key>$2<key>Status</key><string>locked</string></dict>"; }
-defaults write "$FFPOL" Preferences "<dict>$(locked network.dnsCacheExpiration '<integer>0</integer>')$(locked network.dnsCacheExpirationGracePeriod '<integer>0</integer>')$(locked network.http.http3.enable '<false/>')</dict>"
+defaults write "$FFPOL" Preferences "<dict>$(locked network.dns.get-ttl '<false/>')$(locked network.dnsCacheExpiration '<integer>0</integer>')$(locked network.dnsCacheExpirationGracePeriod '<integer>0</integer>')$(locked network.http.http3.enable '<false/>')</dict>"
+# La VPN integrada de Firefox resolvería las direcciones fuera de la Mac, sin pasar por el bloqueo.
+defaults write "$FFPOL" IPProtectionAvailable -bool false
 chmod 644 "$FFPOL.plist"
 
 install -m 755 -o root -g wheel "$HERE/cli/focus" /usr/local/libexec/focus-cli

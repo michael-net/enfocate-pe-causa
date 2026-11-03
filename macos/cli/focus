@@ -157,19 +157,6 @@ apply() {
   # Con -HUP macOS a veces no vuelve a leer /etc/hosts. Reiniciar mDNSResponder sí lo obliga.
   sudo dscacheutil -flushcache 2>/dev/null || true
   sudo killall mDNSResponder 2>/dev/null || true
-  [ -n "$sites" ] && cortar_conexiones
-}
-
-# /etc/hosts solo afecta a las conexiones nuevas. Los navegadores reutilizan las que ya tenían
-# abiertas, así que se reinicia su proceso de red: lo vuelven a abrir solos, sin cerrar pestañas.
-cortar_conexiones() {
-  local u
-  u="$(stat -f %u /dev/console)"
-  [ "$u" != 0 ] || return 0
-  # Chrome, Edge, Brave, Opera, Vivaldi, Arc
-  sudo pkill -U "$u" -f 'utility-sub-type=network.mojom.NetworkService' 2>/dev/null || true
-  # Safari. Con -f porque macOS recorta el nombre del proceso, y con -KILL porque ignora la señal normal.
-  sudo pkill -KILL -U "$u" -f 'WebKit.Networking.xpc/' 2>/dev/null || true
 }
 
 # ---- installing the enforcement daemon ------------------------------------
@@ -197,6 +184,48 @@ AUTO_SKIP_FILE="$FOCUS_DIR/auto-skip"
 AUTO_SESSION=0
 ENFORCER="/usr/local/libexec/focus-enforcer"
 PLIST="/Library/LaunchDaemons/$LABEL.plist"
+RUTAS="$FOCUS_DIR/rutas"   # direcciones cortadas al empezar un bloqueo: "hasta ip" por línea
+CORTE_S=180                # Firefox cierra solo una conexión que lleva 170 s sin usarse
+
+# /etc/hosts solo afecta a las conexiones nuevas, y los navegadores reutilizan las que ya tenían
+# abiertas. Esto las corta para que una pestaña abierta también quede bloqueada.
+cortar() { # arg: sitios
+  local u fin s ip
+  u="$(stat -f %u /dev/console)"
+  if [ "$u" != 0 ]; then
+    # Chrome, Edge, Brave, Opera, Vivaldi y Arc: su proceso de red se vuelve a abrir solo, sin cerrar pestañas.
+    pkill -U "$u" -f 'utility-sub-type=network.mojom.NetworkService' 2>/dev/null
+    # Safari. Con -f porque macOS recorta el nombre del proceso, y con -KILL porque ignora la señal normal.
+    pkill -KILL -U "$u" -f 'WebKit.Networking.xpc/' 2>/dev/null
+  fi
+  # Firefox maneja la red en su proceso principal. Durante unos minutos se rechaza el tráfico
+  # hacia las direcciones reales de los sitios (dig no lee /etc/hosts): la conexión abierta falla
+  # y Firefox vuelve a preguntar la dirección, que ya es la del bloqueo.
+  fin=$(( $(date +%s) + CORTE_S ))
+  while IFS= read -r s; do
+    [ -z "$s" ] && continue
+    for ip in $(dig +short +time=2 +tries=1 "$s" A "www.$s" A 2>/dev/null | grep -E '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$'); do
+      route -q -n add -host "$ip" 127.0.0.1 -reject >/dev/null 2>&1 && echo "$fin $ip" >> "$RUTAS"
+    done
+    for ip in $(dig +short +time=2 +tries=1 "$s" AAAA "www.$s" AAAA 2>/dev/null | grep -E '^[0-9a-fA-F:]+:[0-9a-fA-F:]*$'); do
+      route -q -n add -inet6 -host "$ip" ::1 -reject >/dev/null 2>&1 && echo "$fin $ip" >> "$RUTAS"
+    done
+  done <<< "$1"
+}
+
+quitar_rutas() { # arg: "todas", o nada para quitar solo las vencidas
+  [ -s "$RUTAS" ] || return 0
+  local ahora fin ip quedan=""
+  ahora="$(date +%s)"
+  while read -r fin ip; do
+    if [ "${1:-}" = todas ] || [ "$ahora" -ge "$fin" ]; then
+      case "$ip" in *:*) route -q -n delete -inet6 -host "$ip" >/dev/null 2>&1 ;; *) route -q -n delete -host "$ip" >/dev/null 2>&1 ;; esac
+    else
+      quedan+="$fin $ip"$'\n'
+    fi
+  done < "$RUTAS"
+  printf '%s' "$quedan" > "$RUTAS"
+}
 
 write_block() { # arg: newline-separated sites ("" clears the block)
   local sites="$1" tmp
@@ -220,25 +249,28 @@ write_block() { # arg: newline-separated sites ("" clears the block)
     # Con -HUP macOS a veces no vuelve a leer /etc/hosts. Reiniciar mDNSResponder sí lo obliga.
     dscacheutil -flushcache 2>/dev/null || true
     killall mDNSResponder 2>/dev/null || true
-    # Los navegadores reutilizan conexiones abiertas: se reinicia su proceso de red.
-    if [ -n "$sites" ]; then
-      u="$(stat -f %u /dev/console)"
-      if [ "$u" != 0 ]; then
-        pkill -U "$u" -f 'utility-sub-type=network.mojom.NetworkService' 2>/dev/null
-        pkill -KILL -U "$u" -f 'WebKit.Networking.xpc/' 2>/dev/null
-      fi
-    fi
+    [ -n "$sites" ] && cortar "$sites"
   fi
   rm -f "$tmp"
 }
 
 cleanup_and_exit() {
   write_block ""                      # unblock everything
+  quitar_rutas todas
   rm -f "$LOCK_FILE"
   rm -f "$PLIST" "$ENFORCER"
   launchctl bootout "system/$LABEL" 2>/dev/null || true
   exit 0
 }
+
+# Cada vez que empieza, se extiende o cambia un bloqueo, este servicio arranca de nuevo.
+if [ -f "$LOCK_FILE" ]; then
+  sites="$(sed -n '2,$p' "$LOCK_FILE" | grep -v '^app:' || true)"
+  if [ -n "$sites" ]; then
+    write_block "$sites"
+    cortar "$sites"
+  fi
+fi
 
 while true; do
   [ -f "$LOCK_FILE" ] || cleanup_and_exit
@@ -248,6 +280,7 @@ while true; do
   [ "$now" -ge "$until_epoch" ] && cleanup_and_exit
   sites="$(sed -n '2,$p' "$LOCK_FILE" | grep -v '^app:' || true)"
   write_block "$sites"
+  quitar_rutas
   while IFS= read -r a; do
     [ -n "$a" ] && pkill -U "$(stat -f %u /dev/console)" -x "${a#app:}" 2>/dev/null
   done < <(grep '^app:' "$LOCK_FILE" || true)

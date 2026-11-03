@@ -25,6 +25,7 @@ if [ -f "/Library/Application Support/focus/firefox-politica" ]; then
 else
   sudo defaults delete "$FFPOL" DNSOverHTTPS 2>/dev/null || true
   sudo defaults delete "$FFPOL" Preferences 2>/dev/null || true
+  sudo defaults delete "$FFPOL" IPProtectionAvailable 2>/dev/null || true
 fi
 sudo rm -rf "/Library/Application Support/focus" /Users/Shared/focus-sesion
 # Se escribe sobre el mismo archivo: si se reemplaza, macOS deja de notar los cambios en /etc/hosts.
