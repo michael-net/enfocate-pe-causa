@@ -82,6 +82,9 @@ jobs:
           ps -axo pid,user,comm | grep -i -E 'webkit|safari|firefox' | grep -v grep
           sleep 8
           echo "pf:"; sudo pfctl -a com.apple/250.Enfocate -s rules 2>/dev/null; sudo pfctl -s info 2>/dev/null | head -1
+          ls "/Library/Application Support/focus"
+          time dig +short +time=2 +tries=1 wikipedia.org A www.wikipedia.org A wikipedia.org AAAA www.wikipedia.org AAAA
+          ( for t in 5 10 20; do sleep 5; echo "pf despues: $(sudo pfctl -s info 2>/dev/null | head -1)"; sudo pfctl -a com.apple/250.Enfocate -s rules 2>/dev/null | head -2; done ) &
           lsof -nP -iTCP -sTCP:ESTABLISHED -a -c firefox 2>/dev/null | grep -E '198\.35|208\.80|140\.82' 
           curl -sS -m 5 -o /dev/null -w 'curl youtube: %{remote_ip} %{http_code}\n' https://www.youtube.com || true
           SH
