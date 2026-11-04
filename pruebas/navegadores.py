@@ -14,6 +14,7 @@ import time
 
 from selenium import webdriver
 from selenium.common.exceptions import WebDriverException
+from urllib3.exceptions import HTTPError
 
 # URL y el título que tiene la página de verdad. Las páginas de error no lo tienen.
 SITIOS = {
@@ -101,9 +102,16 @@ def main():
 
     for s in CHEQUEOS:
         time.sleep(max(0, t0 + s - time.time()))
-        for nombre, d in abiertos.items():
+        for nombre, d in list(abiertos.items()):
             for sitio, (url, _) in SITIOS.items():
-                r = abre(d, url, s)
+                try:
+                    r = abre(d, url, s)
+                except (ConnectionError, HTTPError) as e:
+                    # El control remoto del navegador se cortó (pasa con Safari al reiniciar su red).
+                    # No dice nada del bloqueo: se sigue con el navegador nuevo.
+                    print(f"  {s:>3}s {nombre}: la prueba perdió el control del navegador ({e})")
+                    abiertos.pop(nombre)
+                    break
                 filas.append((nombre, "ya abierto", s, sitio, r))
                 print(f"  {s:>3}s {nombre} {sitio}: {r.upper() if r == 'abre' else r}")
 
@@ -111,8 +119,12 @@ def main():
         d.quit()
 
     # Navegadores abiertos después de empezar la sesión.
-    for nombre in abiertos:
-        d = abrir(nombre)
+    for nombre in nombres:
+        try:
+            d = abrir(nombre)
+        except WebDriverException as e:
+            print(f"  nuevo {nombre}: no se pudo abrir ({e.msg})")
+            continue
         for sitio, (url, _) in SITIOS.items():
             r = abre(d, url, "nuevo")
             filas.append((nombre, "abierto en la sesión", None, sitio, r))
