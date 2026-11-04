@@ -153,13 +153,12 @@ apply() {
   fi
   # El servicio de bloqueo usa estas direcciones para cortar las conexiones abiertas. Se consultan
   # ahora porque, después de reiniciar el DNS, dig tarda hasta medio minuto en responder.
-  direcciones "$sites" | sudo tee "$FOCUS_DIR/direcciones" > /dev/null
+  direcciones "$sites" | sudo tee "$FOCUS_DIR/direcciones" > /dev/null || true
   echo "Actualizando $HOSTS (puede pedirte la contraseña)..."
   sudo cp "$tmp" "$HOSTS"
   rm -f "$tmp"
-  # Con -HUP macOS a veces no vuelve a leer /etc/hosts. Reiniciar mDNSResponder sí lo obliga.
+  # El servicio de bloqueo reinicia el DNS al arrancar. Hacerlo aquí demoraba los sudo que siguen.
   sudo dscacheutil -flushcache 2>/dev/null || true
-  sudo killall mDNSResponder 2>/dev/null || true
 }
 
 # Direcciones reales de los sitios. dig pregunta al servidor DNS y no lee /etc/hosts.
@@ -168,7 +167,7 @@ direcciones() { # arg: sitios
   while IFS= read -r s; do
     [ -z "$s" ] && continue
     dig +short +time=2 +tries=1 "$s" A "www.$s" A "$s" AAAA "www.$s" AAAA 2>/dev/null \
-      | grep -E '^([0-9]+\.){3}[0-9]+$|^[0-9a-fA-F]*:[0-9a-fA-F:]+$'
+      | grep -E '^([0-9]+\.){3}[0-9]+$|^[0-9a-fA-F]*:[0-9a-fA-F:]+$' || true
   done <<< "$1" | tr '\n' ' '
 }
 
@@ -208,7 +207,7 @@ direcciones() { # arg: sitios
   while IFS= read -r s; do
     [ -z "$s" ] && continue
     dig +short +time=2 +tries=1 "$s" A "www.$s" A "$s" AAAA "www.$s" AAAA 2>/dev/null \
-      | grep -E '^([0-9]+\.){3}[0-9]+$|^[0-9a-fA-F]*:[0-9a-fA-F:]+$'
+      | grep -E '^([0-9]+\.){3}[0-9]+$|^[0-9a-fA-F]*:[0-9a-fA-F:]+$' || true
   done <<< "$1" | tr '\n' ' '
 }
 CORTE_S=180   # Firefox guarda una dirección hasta 60 s y cierra una conexión que lleva 170 s sin usarse
@@ -263,15 +262,19 @@ write_block() { # arg: newline-separated sites ("" clears the block)
       echo "$MARK_END"
     } >> "$tmp"
   fi
-  if ! cmp -s "$tmp" "$HOSTS"; then
-    [ -n "$sites" ] && direcciones "$sites" > "$DIRECCIONES"
-    cp "$tmp" "$HOSTS"
-    # Con -HUP macOS a veces no vuelve a leer /etc/hosts. Reiniciar mDNSResponder sí lo obliga.
-    dscacheutil -flushcache 2>/dev/null || true
-    killall mDNSResponder 2>/dev/null || true
-    [ -n "$sites" ] && cortar "$sites"
-  fi
+  if cmp -s "$tmp" "$HOSTS"; then rm -f "$tmp"; return 1; fi
+  [ -n "$sites" ] && direcciones "$sites" > "$DIRECCIONES"
+  cp "$tmp" "$HOSTS"
   rm -f "$tmp"
+  [ -n "$sites" ] && cortar "$sites"
+  renovar_dns
+  return 0
+}
+
+# Con -HUP macOS a veces no vuelve a leer /etc/hosts. Reiniciar mDNSResponder sí lo obliga.
+renovar_dns() {
+  dscacheutil -flushcache 2>/dev/null || true
+  killall mDNSResponder 2>/dev/null || true
 }
 
 cleanup_and_exit() {
@@ -286,9 +289,9 @@ cleanup_and_exit() {
 # Cada vez que empieza, se extiende o cambia un bloqueo, este servicio arranca de nuevo.
 if [ -f "$LOCK_FILE" ]; then
   sites="$(sed -n '2,$p' "$LOCK_FILE" | grep -v '^app:' || true)"
-  if [ -n "$sites" ]; then
-    write_block "$sites"
+  if [ -n "$sites" ] && ! write_block "$sites"; then
     cortar "$sites"
+    renovar_dns
   fi
 fi
 
