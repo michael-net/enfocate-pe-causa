@@ -73,6 +73,10 @@ jobs:
           orden focus60
           for i in $(seq 30); do grep -q '127.0.0.1 github.com' /etc/hosts && break; sleep 1; done
           tail -12 /etc/hosts
+          # Diagnóstico temporal, en segundo plano para no cambiar los tiempos.
+          ( for t in 1 2 3 4 5 6; do
+              echo "[$((t*3))s] pf: $(sudo pfctl -s info 2>/dev/null | head -1 | cut -c1-30) reglas: $(sudo pfctl -a com.apple/250.Enfocate -s rules 2>/dev/null | grep -oE 'to [0-9a-f:.]+' | sort -u | tr '\n' ' ') dir: $(cat '/Library/Application Support/focus/direcciones' 2>/dev/null) ff: $(lsof -nP -iTCP -sTCP:ESTABLISHED -a -c firefox 2>/dev/null | grep -oE '198\.35\.[0-9.]+|208\.80\.[0-9.]+|140\.82\.[0-9.]+' | sort -u | tr '\n' ' ')"
+              sleep 3; done; sudo pfctl -s states 2>/dev/null | head -3; sudo pfctl -s info | grep -iE 'match|state' ) &
           SH
       - name: Probar Safari, Chrome, Edge y Firefox
         run: python pruebas/navegadores.py "bash $RUNNER_TEMP/iniciar.sh" safari chrome edge firefox
