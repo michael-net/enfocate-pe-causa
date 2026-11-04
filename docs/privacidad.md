@@ -12,7 +12,7 @@ Todo lo que guarda está en tu computadora. En Mac:
 | `/Library/Application Support/focus/status` y `sesion.state` | Fase actual y hora en que termina |
 | `/Library/Application Support/focus/lock` | Hora de fin y lista bloqueada durante una sesión |
 | `/etc/hosts` | Los sitios bloqueados durante una sesión |
-| `/Library/Application Support/focus/pf-token` y `pf-hasta` | Mientras dura el corte de conexiones: el permiso del filtro de paquetes y la hora en que se quita |
+| `/Library/Application Support/focus/direcciones`, `pf-token` y `pf-hasta` | Mientras dura el corte de conexiones: las direcciones de tus sitios bloqueados, el permiso del filtro de paquetes y la hora en que se quita. Se borran a los 3 minutos |
 | `/Library/Preferences/org.mozilla.firefox.plist` | La política que apaga el DNS cifrado de Firefox, para que respete el bloqueo |
 
 En Windows, lo mismo está en `C:\ProgramData\Enfocate\` (`sites`, `apps`, `auto-skip`, `status`, `sesion.state` y `owner`, el identificador de tu cuenta) y en `C:\Windows\System32\drivers\etc\hosts`. La política de Firefox está en el registro, en `HKLM\SOFTWARE\Policies\Mozilla\Firefox\DNSOverHTTPS`.
