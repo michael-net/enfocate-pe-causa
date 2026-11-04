@@ -151,11 +151,24 @@ apply() {
       echo "$MARK_END"
     } >> "$tmp"
   fi
+  # El servicio de bloqueo usa estas direcciones para cortar las conexiones abiertas. Se consultan
+  # ahora porque, después de reiniciar el DNS, dig tarda hasta medio minuto en responder.
+  direcciones "$sites" | sudo tee "$FOCUS_DIR/direcciones" > /dev/null || true
   echo "Actualizando $HOSTS (puede pedirte la contraseña)..."
   sudo cp "$tmp" "$HOSTS"
   rm -f "$tmp"
+  # El servicio de bloqueo reinicia el DNS al arrancar. Hacerlo aquí demoraba los sudo que siguen.
   sudo dscacheutil -flushcache 2>/dev/null || true
-  sudo killall -HUP mDNSResponder 2>/dev/null || true
+}
+
+# Direcciones reales de los sitios. dig pregunta al servidor DNS y no lee /etc/hosts.
+direcciones() { # arg: sitios
+  local s
+  while IFS= read -r s; do
+    [ -z "$s" ] && continue
+    dig +short +time=2 +tries=1 "$s" A "www.$s" A "$s" AAAA "www.$s" AAAA 2>/dev/null \
+      | grep -E '^([0-9]+\.){3}[0-9]+$|^[0-9a-fA-F]*:[0-9a-fA-F:]+$' || true
+  done <<< "$1" | tr '\n' ' '
 }
 
 # ---- installing the enforcement daemon ------------------------------------
@@ -183,6 +196,56 @@ AUTO_SKIP_FILE="$FOCUS_DIR/auto-skip"
 AUTO_SESSION=0
 ENFORCER="/usr/local/libexec/focus-enforcer"
 PLIST="/Library/LaunchDaemons/$LABEL.plist"
+ANCLA="com.apple/250.Enfocate"          # reglas de pf, dentro del grupo que macOS ya carga
+PF_TOKEN="$FOCUS_DIR/pf-token"          # pf lleva la cuenta de quién lo activó: se libera solo lo propio
+PF_HASTA="$FOCUS_DIR/pf-hasta"
+DIRECCIONES="$FOCUS_DIR/direcciones"   # direcciones reales de los sitios, anotadas al empezar el bloqueo
+
+# Direcciones reales de los sitios. dig pregunta al servidor DNS y no lee /etc/hosts.
+direcciones() { # arg: sitios
+  local s
+  while IFS= read -r s; do
+    [ -z "$s" ] && continue
+    dig +short +time=2 +tries=1 "$s" A "www.$s" A "$s" AAAA "www.$s" AAAA 2>/dev/null \
+      | grep -E '^([0-9]+\.){3}[0-9]+$|^[0-9a-fA-F]*:[0-9a-fA-F:]+$' || true
+  done <<< "$1" | tr '\n' ' '
+}
+CORTE_S=180   # Firefox guarda una dirección hasta 60 s y cierra una conexión que lleva 170 s sin usarse
+
+# /etc/hosts solo afecta a las conexiones nuevas, y los navegadores reutilizan las que ya tenían
+# abiertas. Esto las corta para que una pestaña abierta también quede bloqueada.
+cortar() { # arg: sitios
+  local u ip ips
+  # Firefox maneja la red en su proceso principal. Por unos minutos, el filtro de paquetes rechaza
+  # el tráfico hacia las direcciones reales de los sitios (dig no lee /etc/hosts): la conexión
+  # abierta se corta y Firefox vuelve a preguntar la dirección, que ya es la del bloqueo.
+  # Va primero porque es lo más rápido. Las direcciones se consultaron antes de cambiar /etc/hosts:
+  # después de reiniciar el DNS, dig tarda hasta medio minuto en responder.
+  ips="$(cat "$DIRECCIONES" 2>/dev/null)"
+  [ -n "${ips// /}" ] || ips="$(direcciones "$1")"
+  if [ -n "${ips// /}" ]; then
+    if for ip in $ips; do echo "block return out quick proto { tcp udp } from any to $ip"; done \
+        | pfctl -a "$ANCLA" -f - >/dev/null 2>&1; then
+      [ -s "$PF_TOKEN" ] || pfctl -E 2>&1 | sed -n 's/.*Token : \([0-9]*\).*/\1/p' > "$PF_TOKEN"
+      echo $(( $(date +%s) + CORTE_S )) > "$PF_HASTA"
+    fi
+  fi
+  u="$(stat -f %u /dev/console)"
+  if [ "$u" != 0 ]; then
+    # Chrome, Edge, Brave, Opera, Vivaldi y Arc: su proceso de red se vuelve a abrir solo, sin cerrar pestañas.
+    pkill -U "$u" -f 'utility-sub-type=network.mojom.NetworkService' 2>/dev/null
+    # Safari. Con -f porque macOS recorta el nombre del proceso, y con -KILL porque ignora la señal normal.
+    pkill -KILL -U "$u" -f 'WebKit.Networking.xpc/' 2>/dev/null
+  fi
+}
+
+quitar_corte() { # arg: "ya" para quitarlo aunque no haya vencido
+  [ -f "$PF_HASTA" ] || return 0
+  if [ "${1:-}" != ya ] && [ "$(date +%s)" -lt "$(cat "$PF_HASTA" 2>/dev/null || echo 0)" ]; then return 0; fi
+  pfctl -a "$ANCLA" -F all >/dev/null 2>&1
+  [ -s "$PF_TOKEN" ] && pfctl -X "$(cat "$PF_TOKEN")" >/dev/null 2>&1
+  rm -f "$PF_HASTA" "$PF_TOKEN" "$DIRECCIONES"
+}
 
 write_block() { # arg: newline-separated sites ("" clears the block)
   local sites="$1" tmp
@@ -201,21 +264,38 @@ write_block() { # arg: newline-separated sites ("" clears the block)
       echo "$MARK_END"
     } >> "$tmp"
   fi
-  if ! cmp -s "$tmp" "$HOSTS"; then
-    cp "$tmp" "$HOSTS"
-    dscacheutil -flushcache 2>/dev/null || true
-    killall -HUP mDNSResponder 2>/dev/null || true
-  fi
+  if cmp -s "$tmp" "$HOSTS"; then rm -f "$tmp"; return 1; fi
+  [ -n "$sites" ] && direcciones "$sites" > "$DIRECCIONES"
+  cp "$tmp" "$HOSTS"
   rm -f "$tmp"
+  [ -n "$sites" ] && cortar "$sites"
+  renovar_dns
+  return 0
+}
+
+# Con -HUP macOS a veces no vuelve a leer /etc/hosts. Reiniciar mDNSResponder sí lo obliga.
+renovar_dns() {
+  dscacheutil -flushcache 2>/dev/null || true
+  killall mDNSResponder 2>/dev/null || true
 }
 
 cleanup_and_exit() {
   write_block ""                      # unblock everything
+  quitar_corte ya
   rm -f "$LOCK_FILE"
   rm -f "$PLIST" "$ENFORCER"
   launchctl bootout "system/$LABEL" 2>/dev/null || true
   exit 0
 }
+
+# Cada vez que empieza, se extiende o cambia un bloqueo, este servicio arranca de nuevo.
+if [ -f "$LOCK_FILE" ]; then
+  sites="$(sed -n '2,$p' "$LOCK_FILE" | grep -v '^app:' || true)"
+  if [ -n "$sites" ] && ! write_block "$sites"; then
+    cortar "$sites"
+    renovar_dns
+  fi
+fi
 
 while true; do
   [ -f "$LOCK_FILE" ] || cleanup_and_exit
@@ -225,6 +305,7 @@ while true; do
   [ "$now" -ge "$until_epoch" ] && cleanup_and_exit
   sites="$(sed -n '2,$p' "$LOCK_FILE" | grep -v '^app:' || true)"
   write_block "$sites"
+  quitar_corte
   while IFS= read -r a; do
     [ -n "$a" ] && pkill -U "$(stat -f %u /dev/console)" -x "${a#app:}" 2>/dev/null
   done < <(grep '^app:' "$LOCK_FILE" || true)

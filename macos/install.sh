@@ -47,3 +47,6 @@ pkill -x Enfocate 2>/dev/null || true
 sleep 1
 nohup "$APP/Contents/MacOS/Enfocate" --sin-auto >/dev/null 2>&1 &
 echo "Listo. Busca el icono en la barra de menú."
+if pgrep -x firefox >/dev/null; then
+  echo "Cierra Firefox y vuelve a abrirlo para que respete el bloqueo."
+fi

@@ -19,6 +19,18 @@ jobs:
           for f in macos/*.sh macos/cli/focus macos/daemon/*.sh; do bash -n "$f"; done
       - name: Compilar el widget
         run: swiftc -O macos/app/main.swift -o "$RUNNER_TEMP/Enfocate"
+      - name: Instalar el servicio y revisar la política de Firefox
+        run: |
+          sudo bash macos/install-service.sh
+          P=/Library/Preferences/org.mozilla.firefox.plist
+          plutil -p "$P"
+          [ "$(/usr/libexec/PlistBuddy -c 'Print :DNSOverHTTPS:Enabled' "$P")" = false ]
+          [ "$(/usr/libexec/PlistBuddy -c 'Print :DNSOverHTTPS:Locked' "$P")" = true ]
+          [ "$(/usr/libexec/PlistBuddy -c 'Print :EnterprisePoliciesEnabled' "$P")" = true ]
+          [ "$(/usr/libexec/PlistBuddy -c 'Print :Preferences:network.http.http3.enable:Value' "$P")" = false ]
+          [ "$(/usr/libexec/PlistBuddy -c 'Print :Preferences:network.dnsCacheExpiration:Status' "$P")" = locked ]
+          bash macos/uninstall.sh
+          [ ! -e "$P" ] || { echo "La desinstalación dejó la política de Firefox"; exit 1; }
 
   windows:
     runs-on: windows-latest
@@ -47,6 +59,10 @@ jobs:
           if ((Fase) -ne 'idle') { throw "Se esperaba idle: $(Fase)" }
           # Con comodín: el script del flujo no conserva la "ó" del nombre de la carpeta.
           if (-not (Test-Path "$env:ProgramFiles\Enf*cate pe causa\Enfocate.exe")) { throw 'Falta la app' }
+          $doh = Get-ItemProperty 'HKLM:\SOFTWARE\Policies\Mozilla\Firefox\DNSOverHTTPS'
+          if ($doh.Enabled -ne 0 -or $doh.Locked -ne 1) { throw 'Falta la política de Firefox' }
+          $h3 = Get-ItemProperty 'HKLM:\SOFTWARE\Policies\Mozilla\Firefox\Preferences\network.http.http3.enable'
+          if ($h3.Value -ne 0 -or $h3.Type -ne 'boolean' -or $h3.Status -ne 'locked') { throw 'Falta la preferencia de Firefox' }
           Orden 'site+ example.com'
           if ((Get-Content (Join-Path $datos 'sites')) -notcontains 'example.com') { throw 'No se agregó el sitio' }
           Orden 'focus60'

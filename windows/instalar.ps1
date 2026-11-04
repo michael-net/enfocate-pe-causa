@@ -22,6 +22,9 @@ if (-not $Elevado) {
     Start-Process (Join-Path $destino 'Enfocate.exe') -ArgumentList '--sin-auto'
     Write-Host 'Listo. Busca el icono en la bandeja del sistema, abajo a la derecha.'
     Write-Host 'Si no lo ves, haz clic en la flecha ^ de la bandeja y arrástralo a la barra de tareas.'
+    if (Get-Process firefox -ErrorAction SilentlyContinue) {
+        Write-Host 'Cierra Firefox y vuelve a abrirlo para que respete el bloqueo.'
+    }
     exit 0
 }
 
@@ -39,7 +42,7 @@ try {
         /r:System.Windows.Forms.dll /r:System.Drawing.dll "$aqui\Comun.cs" "$aqui\app\Bandeja.cs"
     if ($LASTEXITCODE) { throw 'No se pudo compilar la app.' }
     & $csc /nologo /codepage:65001 /optimize /target:exe "/out:$tmp\EnfocateServicio.exe" `
-        /r:System.ServiceProcess.dll "$aqui\Comun.cs" "$aqui\servicio\Servicio.cs"
+        /r:System.ServiceProcess.dll /r:System.Management.dll "$aqui\Comun.cs" "$aqui\servicio\Servicio.cs" "$aqui\servicio\Conexiones.cs"
     if ($LASTEXITCODE) { throw 'No se pudo compilar el servicio.' }
 
     # Una versión anterior: se detiene para reemplazarla. Una sesión activa sigue al volver a arrancar.
@@ -64,6 +67,27 @@ try {
     # Por defecto, la sesión automática deja libre WhatsApp.
     $skip = Join-Path $datos 'auto-skip'
     if (-not (Test-Path $skip)) { Set-Content $skip 'WhatsApp' -Encoding ASCII }
+
+    # Firefox puede usar su propio DNS cifrado e ignorar hosts. Una política del sistema lo apaga
+    # para que use el DNS de Windows. Si no había políticas de Firefox, se anota para borrarlas al desinstalar.
+    $ff = 'HKLM:\SOFTWARE\Policies\Mozilla\Firefox'
+    if (-not (Test-Path $ff)) { New-Item (Join-Path $datos 'firefox-politica') -Force | Out-Null }
+    New-Item "$ff\DNSOverHTTPS" -Force | Out-Null
+    Set-ItemProperty "$ff\DNSOverHTTPS" -Name Enabled -Value 0 -Type DWord
+    Set-ItemProperty "$ff\DNSOverHTTPS" -Name Locked -Value 1 -Type DWord
+    # Firefox guarda las direcciones que ya consultó y usa HTTP/3, que mantiene conexiones abiertas por UDP.
+    # Sin eso, al empezar una sesión sigue entrando a los sitios que ya había visitado. La caché queda
+    # en 1 segundo: con 0, Firefox usa su valor normal de 60.
+    foreach ($p in @(@('network.dns.get-ttl', 0, 'boolean'), @('network.dnsCacheExpiration', 1, 'number'),
+                     @('network.dnsCacheExpirationGracePeriod', 0, 'number'), @('network.http.http3.enable', 0, 'boolean'))) {
+        $k = "$ff\Preferences\$($p[0])"
+        New-Item $k -Force | Out-Null
+        Set-ItemProperty $k -Name Value -Value $p[1] -Type DWord
+        Set-ItemProperty $k -Name Type -Value $p[2]
+        Set-ItemProperty $k -Name Status -Value 'locked'
+    }
+    # La VPN integrada de Firefox resolvería las direcciones fuera de la PC, sin pasar por el bloqueo.
+    Set-ItemProperty $ff -Name IPProtectionAvailable -Value 0 -Type DWord
 
     if (-not $existe) {
         New-Service -Name $servicio -BinaryPathName "`"$destino\EnfocateServicio.exe`"" -DisplayName 'Enfócate pe causa' `

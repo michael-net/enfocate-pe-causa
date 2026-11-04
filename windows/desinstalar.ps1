@@ -42,6 +42,18 @@ try {
     $n = [regex]::Replace($t, '(?ms)^# >>> focus block >>>\r?\n.*?^# <<< focus block <<<\r?\n?', '')
     if ($n -ne $t) { [IO.File]::WriteAllText($hosts, $n, [Text.Encoding]::Default) }
     ipconfig /flushdns | Out-Null
+    netsh advfirewall firewall delete rule name="Enfocate pe causa: corte" | Out-Null
+
+    # La política de Firefox: se borra entera si la creó el instalador, si no, solo lo que agregó.
+    $ff = 'HKLM:\SOFTWARE\Policies\Mozilla\Firefox'
+    if (Test-Path (Join-Path $datos 'firefox-politica')) { Remove-Item $ff -Recurse -Force -ErrorAction SilentlyContinue }
+    else {
+        Remove-Item "$ff\DNSOverHTTPS" -Recurse -Force -ErrorAction SilentlyContinue
+        foreach ($n in 'network.dns.get-ttl', 'network.dnsCacheExpiration', 'network.dnsCacheExpirationGracePeriod', 'network.http.http3.enable') {
+            Remove-Item "$ff\Preferences\$n" -Recurse -Force -ErrorAction SilentlyContinue
+        }
+        Remove-ItemProperty $ff -Name IPProtectionAvailable -ErrorAction SilentlyContinue
+    }
 
     Remove-Item $destino, $datos -Recurse -Force -ErrorAction SilentlyContinue
     Remove-ItemProperty "Registry::HKEY_USERS\$Sid\Software\Microsoft\Windows\CurrentVersion\Run" `

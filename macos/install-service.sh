@@ -40,10 +40,29 @@ fi
 
 # Sin sesión activa no debe quedar nada bloqueado
 if [ ! -f "$FDIR/lock" ]; then
-  sed -i '' '/^# >>> focus block >>>$/,/^# <<< focus block <<<$/d' /etc/hosts
+  # Se escribe sobre el mismo archivo: si se reemplaza, macOS deja de notar los cambios en /etc/hosts.
+  T="$(mktemp)"
+  sed '/^# >>> focus block >>>$/,/^# <<< focus block <<<$/d' /etc/hosts > "$T"
+  cmp -s "$T" /etc/hosts || tee /etc/hosts < "$T" > /dev/null
+  rm -f "$T"
   dscacheutil -flushcache 2>/dev/null || true
-  killall -HUP mDNSResponder 2>/dev/null || true
+  killall mDNSResponder 2>/dev/null || true
 fi
+
+# Firefox puede usar su propio DNS cifrado e ignorar /etc/hosts. Una política del sistema lo apaga
+# para que use el DNS de la Mac. Si el archivo de políticas no existía, se anota para borrarlo al desinstalar.
+FFPOL="/Library/Preferences/org.mozilla.firefox"
+[ -f "$FFPOL.plist" ] || touch "$FDIR/firefox-politica"
+defaults write "$FFPOL" EnterprisePoliciesEnabled -bool true
+defaults write "$FFPOL" DNSOverHTTPS -dict Enabled -bool false Locked -bool true
+# Firefox guarda las direcciones que ya consultó y usa HTTP/3, que mantiene conexiones abiertas por UDP.
+# Sin eso, al empezar una sesión sigue entrando a los sitios que ya había visitado. La caché queda
+# en 1 segundo: con 0, Firefox usa su valor normal de 60.
+locked() { echo "<key>$1</key><dict><key>Value</key>$2<key>Status</key><string>locked</string></dict>"; }
+defaults write "$FFPOL" Preferences "<dict>$(locked network.dns.get-ttl '<false/>')$(locked network.dnsCacheExpiration '<integer>1</integer>')$(locked network.dnsCacheExpirationGracePeriod '<integer>0</integer>')$(locked network.http.http3.enable '<false/>')</dict>"
+# La VPN integrada de Firefox resolvería las direcciones fuera de la Mac, sin pasar por el bloqueo.
+defaults write "$FFPOL" IPProtectionAvailable -bool false
+chmod 644 "$FFPOL.plist"
 
 install -m 755 -o root -g wheel "$HERE/cli/focus" /usr/local/libexec/focus-cli
 sed "s#__UID__#$UID_OWNER#" "$HERE/daemon/focus-sesion-daemon.sh" > /usr/local/libexec/focus-sesion

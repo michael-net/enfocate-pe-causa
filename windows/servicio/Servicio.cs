@@ -36,6 +36,8 @@ namespace Enfocate
         long fin;
         int ronda, rondas;
         bool auto;
+        long segundoCorte;  // cuándo volver a cortar las conexiones de Firefox, o 0
+        long finCorte;      // cuándo quitar la regla del firewall que rechaza las direcciones reales, o 0
         SecurityIdentifier dueno;
         Thread hilo;
         volatile bool parar;
@@ -70,6 +72,7 @@ namespace Enfocate
             try { dueno = new SecurityIdentifier(File.ReadAllText(Rutas.Dueno).Trim()); } catch { dueno = null; }
             CargarEstado();
             Guardar();
+            Conexiones.QuitarBloqueo();  // por si el servicio se detuvo con la regla puesta
             int vuelta = 0;
             while (!parar)
             {
@@ -226,7 +229,10 @@ namespace Enfocate
         {
             bool b = Bloqueado();
             EscribirHosts(b ? SitiosABloquear() : new List<string>());
-            if (!b) return;
+            if (finCorte > 0 && (!b || Reloj.Ahora() >= finCorte)) { finCorte = 0; Conexiones.QuitarBloqueo(); }
+            if (!b) { segundoCorte = 0; return; }
+            // Firefox guarda la dirección real hasta 60 s y con ella puede volver a conectarse: se corta otra vez.
+            if (segundoCorte > 0 && Reloj.Ahora() >= segundoCorte) { segundoCorte = 0; Conexiones.CortarFirefox(); }
             uint consola = WTSGetActiveConsoleSessionId();
             foreach (var a in AppsABloquear(auto))
             {
@@ -263,11 +269,20 @@ namespace Enfocate
                     texto += MarcaFin + "\r\n";
                 }
                 if (texto == actual) return;
+                var ips = sitios.Count > 0 ? Conexiones.Direcciones(sitios) : null;
                 var attrs = File.Exists(Rutas.Hosts) ? File.GetAttributes(Rutas.Hosts) : FileAttributes.Normal;
                 if ((attrs & FileAttributes.ReadOnly) != 0) File.SetAttributes(Rutas.Hosts, attrs & ~FileAttributes.ReadOnly);
                 File.WriteAllText(Rutas.Hosts, texto, Encoding.Default);
                 if ((attrs & FileAttributes.ReadOnly) != 0) File.SetAttributes(Rutas.Hosts, attrs);
                 try { DnsFlushResolverCache(); } catch { }
+                // Lo que se acaba de bloquear no debe seguir abierto en el navegador.
+                if (sitios.Count > 0)
+                {
+                    Conexiones.Cortar();
+                    Conexiones.BloquearDirecciones(ips);
+                    finCorte = Reloj.Ahora() + 180;
+                    segundoCorte = Reloj.Ahora() + 70;
+                }
             }
             catch { }
         }
