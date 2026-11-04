@@ -151,12 +151,25 @@ apply() {
       echo "$MARK_END"
     } >> "$tmp"
   fi
+  # El servicio de bloqueo usa estas direcciones para cortar las conexiones abiertas. Se consultan
+  # ahora porque, después de reiniciar el DNS, dig tarda hasta medio minuto en responder.
+  direcciones "$sites" | sudo tee "$FOCUS_DIR/direcciones" > /dev/null
   echo "Actualizando $HOSTS (puede pedirte la contraseña)..."
   sudo cp "$tmp" "$HOSTS"
   rm -f "$tmp"
   # Con -HUP macOS a veces no vuelve a leer /etc/hosts. Reiniciar mDNSResponder sí lo obliga.
   sudo dscacheutil -flushcache 2>/dev/null || true
   sudo killall mDNSResponder 2>/dev/null || true
+}
+
+# Direcciones reales de los sitios. dig pregunta al servidor DNS y no lee /etc/hosts.
+direcciones() { # arg: sitios
+  local s
+  while IFS= read -r s; do
+    [ -z "$s" ] && continue
+    dig +short +time=2 +tries=1 "$s" A "www.$s" A "$s" AAAA "www.$s" AAAA 2>/dev/null \
+      | grep -E '^([0-9]+\.){3}[0-9]+$|^[0-9a-fA-F]*:[0-9a-fA-F:]+$'
+  done <<< "$1" | tr '\n' ' '
 }
 
 # ---- installing the enforcement daemon ------------------------------------
@@ -187,12 +200,23 @@ PLIST="/Library/LaunchDaemons/$LABEL.plist"
 ANCLA="com.apple/250.Enfocate"          # reglas de pf, dentro del grupo que macOS ya carga
 PF_TOKEN="$FOCUS_DIR/pf-token"          # pf lleva la cuenta de quién lo activó: se libera solo lo propio
 PF_HASTA="$FOCUS_DIR/pf-hasta"
+DIRECCIONES="$FOCUS_DIR/direcciones"   # direcciones reales de los sitios, anotadas al empezar el bloqueo
+
+# Direcciones reales de los sitios. dig pregunta al servidor DNS y no lee /etc/hosts.
+direcciones() { # arg: sitios
+  local s
+  while IFS= read -r s; do
+    [ -z "$s" ] && continue
+    dig +short +time=2 +tries=1 "$s" A "www.$s" A "$s" AAAA "www.$s" AAAA 2>/dev/null \
+      | grep -E '^([0-9]+\.){3}[0-9]+$|^[0-9a-fA-F]*:[0-9a-fA-F:]+$'
+  done <<< "$1" | tr '\n' ' '
+}
 CORTE_S=180   # Firefox guarda una dirección hasta 60 s y cierra una conexión que lleva 170 s sin usarse
 
 # /etc/hosts solo afecta a las conexiones nuevas, y los navegadores reutilizan las que ya tenían
 # abiertas. Esto las corta para que una pestaña abierta también quede bloqueada.
 cortar() { # arg: sitios
-  local u s intento ips=""
+  local u ip ips
   u="$(stat -f %u /dev/console)"
   if [ "$u" != 0 ]; then
     # Chrome, Edge, Brave, Opera, Vivaldi y Arc: su proceso de red se vuelve a abrir solo, sin cerrar pestañas.
@@ -203,16 +227,10 @@ cortar() { # arg: sitios
   # Firefox maneja la red en su proceso principal. Por unos minutos, el filtro de paquetes rechaza
   # el tráfico hacia las direcciones reales de los sitios (dig no lee /etc/hosts): la conexión
   # abierta se corta y Firefox vuelve a preguntar la dirección, que ya es la del bloqueo.
-  # Justo después de reiniciar mDNSResponder, macOS puede tardar unos segundos en volver a tener DNS.
-  for intento in 1 2 3 4 5 6 7 8 9 10; do
-    while IFS= read -r s; do
-      [ -z "$s" ] && continue
-      ips+=" $(dig +short +time=2 +tries=1 "$s" A "www.$s" A "$s" AAAA "www.$s" AAAA 2>/dev/null \
-        | grep -E '^([0-9]+\.){3}[0-9]+$|^[0-9a-fA-F]*:[0-9a-fA-F:]+$' | tr '\n' ' ')"
-    done <<< "$1"
-    [ -n "${ips// /}" ] && break
-    sleep 1
-  done
+  # Las direcciones se consultan antes de cambiar /etc/hosts y reiniciar el DNS: justo después,
+  # dig tarda hasta medio minuto en responder.
+  ips="$(cat "$DIRECCIONES" 2>/dev/null)"
+  [ -n "${ips// /}" ] || ips="$(direcciones "$1")"
   [ -n "${ips// /}" ] || return 0
   for ip in $ips; do echo "block return out quick proto { tcp udp } from any to $ip"; done \
     | pfctl -a "$ANCLA" -f - >/dev/null 2>&1 || return 0
@@ -225,7 +243,7 @@ quitar_corte() { # arg: "ya" para quitarlo aunque no haya vencido
   if [ "${1:-}" != ya ] && [ "$(date +%s)" -lt "$(cat "$PF_HASTA" 2>/dev/null || echo 0)" ]; then return 0; fi
   pfctl -a "$ANCLA" -F all >/dev/null 2>&1
   [ -s "$PF_TOKEN" ] && pfctl -X "$(cat "$PF_TOKEN")" >/dev/null 2>&1
-  rm -f "$PF_HASTA" "$PF_TOKEN"
+  rm -f "$PF_HASTA" "$PF_TOKEN" "$DIRECCIONES"
 }
 
 write_block() { # arg: newline-separated sites ("" clears the block)
@@ -246,6 +264,7 @@ write_block() { # arg: newline-separated sites ("" clears the block)
     } >> "$tmp"
   fi
   if ! cmp -s "$tmp" "$HOSTS"; then
+    [ -n "$sites" ] && direcciones "$sites" > "$DIRECCIONES"
     cp "$tmp" "$HOSTS"
     # Con -HUP macOS a veces no vuelve a leer /etc/hosts. Reiniciar mDNSResponder sí lo obliga.
     dscacheutil -flushcache 2>/dev/null || true
