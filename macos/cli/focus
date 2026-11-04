@@ -216,6 +216,20 @@ CORTE_S=180   # Firefox guarda una dirección hasta 60 s y cierra una conexión 
 # abiertas. Esto las corta para que una pestaña abierta también quede bloqueada.
 cortar() { # arg: sitios
   local u ip ips
+  # Firefox maneja la red en su proceso principal. Por unos minutos, el filtro de paquetes rechaza
+  # el tráfico hacia las direcciones reales de los sitios (dig no lee /etc/hosts): la conexión
+  # abierta se corta y Firefox vuelve a preguntar la dirección, que ya es la del bloqueo.
+  # Va primero porque es lo más rápido. Las direcciones se consultaron antes de cambiar /etc/hosts:
+  # después de reiniciar el DNS, dig tarda hasta medio minuto en responder.
+  ips="$(cat "$DIRECCIONES" 2>/dev/null)"
+  [ -n "${ips// /}" ] || ips="$(direcciones "$1")"
+  if [ -n "${ips// /}" ]; then
+    if for ip in $ips; do echo "block return out quick proto { tcp udp } from any to $ip"; done \
+        | pfctl -a "$ANCLA" -f - >/dev/null 2>&1; then
+      [ -s "$PF_TOKEN" ] || pfctl -E 2>&1 | sed -n 's/.*Token : \([0-9]*\).*/\1/p' > "$PF_TOKEN"
+      echo $(( $(date +%s) + CORTE_S )) > "$PF_HASTA"
+    fi
+  fi
   u="$(stat -f %u /dev/console)"
   if [ "$u" != 0 ]; then
     # Chrome, Edge, Brave, Opera, Vivaldi y Arc: su proceso de red se vuelve a abrir solo, sin cerrar pestañas.
@@ -223,18 +237,6 @@ cortar() { # arg: sitios
     # Safari. Con -f porque macOS recorta el nombre del proceso, y con -KILL porque ignora la señal normal.
     pkill -KILL -U "$u" -f 'WebKit.Networking.xpc/' 2>/dev/null
   fi
-  # Firefox maneja la red en su proceso principal. Por unos minutos, el filtro de paquetes rechaza
-  # el tráfico hacia las direcciones reales de los sitios (dig no lee /etc/hosts): la conexión
-  # abierta se corta y Firefox vuelve a preguntar la dirección, que ya es la del bloqueo.
-  # Las direcciones se consultan antes de cambiar /etc/hosts y reiniciar el DNS: justo después,
-  # dig tarda hasta medio minuto en responder.
-  ips="$(cat "$DIRECCIONES" 2>/dev/null)"
-  [ -n "${ips// /}" ] || ips="$(direcciones "$1")"
-  [ -n "${ips// /}" ] || return 0
-  for ip in $ips; do echo "block return out quick proto { tcp udp } from any to $ip"; done \
-    | pfctl -a "$ANCLA" -f - >/dev/null 2>&1 || return 0
-  [ -s "$PF_TOKEN" ] || pfctl -E 2>&1 | sed -n 's/.*Token : \([0-9]*\).*/\1/p' > "$PF_TOKEN"
-  echo $(( $(date +%s) + CORTE_S )) > "$PF_HASTA"
 }
 
 quitar_corte() { # arg: "ya" para quitarlo aunque no haya vencido
