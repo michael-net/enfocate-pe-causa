@@ -192,7 +192,7 @@ CORTE_S=180   # Firefox guarda una dirección hasta 60 s y cierra una conexión 
 # /etc/hosts solo afecta a las conexiones nuevas, y los navegadores reutilizan las que ya tenían
 # abiertas. Esto las corta para que una pestaña abierta también quede bloqueada.
 cortar() { # arg: sitios
-  local u s ips=""
+  local u s intento ips=""
   u="$(stat -f %u /dev/console)"
   if [ "$u" != 0 ]; then
     # Chrome, Edge, Brave, Opera, Vivaldi y Arc: su proceso de red se vuelve a abrir solo, sin cerrar pestañas.
@@ -203,11 +203,16 @@ cortar() { # arg: sitios
   # Firefox maneja la red en su proceso principal. Por unos minutos, el filtro de paquetes rechaza
   # el tráfico hacia las direcciones reales de los sitios (dig no lee /etc/hosts): la conexión
   # abierta se corta y Firefox vuelve a preguntar la dirección, que ya es la del bloqueo.
-  while IFS= read -r s; do
-    [ -z "$s" ] && continue
-    ips+=" $(dig +short +time=2 +tries=1 "$s" A "www.$s" A "$s" AAAA "www.$s" AAAA 2>/dev/null \
-      | grep -E '^([0-9]+\.){3}[0-9]+$|^[0-9a-fA-F]*:[0-9a-fA-F:]+$' | tr '\n' ' ')"
-  done <<< "$1"
+  # Justo después de reiniciar mDNSResponder, macOS puede tardar unos segundos en volver a tener DNS.
+  for intento in 1 2 3 4 5 6 7 8 9 10; do
+    while IFS= read -r s; do
+      [ -z "$s" ] && continue
+      ips+=" $(dig +short +time=2 +tries=1 "$s" A "www.$s" A "$s" AAAA "www.$s" AAAA 2>/dev/null \
+        | grep -E '^([0-9]+\.){3}[0-9]+$|^[0-9a-fA-F]*:[0-9a-fA-F:]+$' | tr '\n' ' ')"
+    done <<< "$1"
+    [ -n "${ips// /}" ] && break
+    sleep 1
+  done
   [ -n "${ips// /}" ] || return 0
   for ip in $ips; do echo "block return out quick proto { tcp udp } from any to $ip"; done \
     | pfctl -a "$ANCLA" -f - >/dev/null 2>&1 || return 0
