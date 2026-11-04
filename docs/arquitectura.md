@@ -16,7 +16,7 @@ Widget (usuario)  --orden-->  Servicio de sesiones (root)  --lock-->  Enforcer (
 | Widget | `macos/app/main.swift` | `~/Applications/Enfócate pe causa.app` | Muestra el estado y envía órdenes |
 | Servicio de sesiones | `macos/daemon/focus-sesion-daemon.sh` | `/usr/local/libexec/focus-sesion` | Lleva el tiempo y decide qué órdenes acepta |
 | CLI | `macos/cli/focus` | `/usr/local/libexec/focus-cli` | Edita las listas y crea el bloqueo |
-| Enforcer | Lo genera la CLI | `/usr/local/libexec/focus-enforcer` | Reaplica el bloqueo cada 2 s y se elimina al terminar |
+| Enforcer | Lo genera la CLI | `/usr/local/libexec/focus-enforcer` | Reaplica el bloqueo cada 2 s y se elimina al terminar. Al arrancar corta las conexiones abiertas: reinicia el proceso de red de Safari y de los navegadores basados en Chromium, y por 3 minutos rechaza con `pf` las direcciones reales de los sitios, para Firefox |
 
 ### Comunicación
 
@@ -67,4 +67,5 @@ El instalador compila con el `csc.exe` de .NET Framework 4, que viene con Window
 - **Órdenes:** la bandeja crea un archivo `cmd-*` por orden en `C:\ProgramData\Enfocate\ordenes\`. Cualquier usuario puede crear archivos ahí, pero el servicio solo acepta los que tienen como dueño la cuenta que instaló la app (`owner`), y descarta los enlaces. Las órdenes son las mismas que en macOS.
 - **Estado y listas:** `status`, `sesion.state`, `sites`, `apps` y `auto-skip` en `C:\ProgramData\Enfocate\`, con el mismo formato que en macOS. Solo SYSTEM y los administradores pueden escribirlos.
 - **Bloqueo:** el servicio escribe el mismo bloque marcado en `C:\Windows\System32\drivers\etc\hosts` mientras la fase es `focus` o `work`, y lo quita en `break` e `idle`. Cierra las apps de la lista que se abran en la sesión de la consola.
+- **Conexiones abiertas:** cuando el bloque cambia y hay sitios, el servicio reinicia el proceso de red de los navegadores basados en Chromium, corta las conexiones TCP de Firefox con `SetTcpEntry` y agrega por 3 minutos una regla del firewall que rechaza las direcciones reales de los sitios. A los 70 segundos vuelve a cortar las de Firefox.
 - **Inicio:** la bandeja se abre al iniciar sesión desde la clave `Run` de tu usuario. Envía `auto` al abrirse y al despertar la PC. Como en algunos equipos Windows no avisa de la suspensión, también la detecta cuando el reloj salta más de 2 minutos.

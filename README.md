@@ -100,6 +100,23 @@ Los sitios se bloquean desde el archivo `hosts` del sistema, y las apps se cierr
 
 Más detalle en [Arquitectura](docs/arquitectura.md).
 
+## Navegadores
+
+Al empezar una sesión, la app también corta las conexiones que el navegador ya tenía abiertas. Sin eso, una pestaña de Instagram abierta seguiría funcionando. Los navegadores reabren su conexión solos, sin cerrar pestañas.
+
+| Navegador | Mac | Windows | Qué hace la app | Qué haces tú |
+|---|---|---|---|---|
+| **Safari** | Probado | No existe en Windows | Reinicia su proceso de red | Si usas **Relay Privado de iCloud** y Safari sigue abriendo los sitios, apágalo en Ajustes del Sistema > tu nombre > iCloud |
+| **Chrome** | Probado | Probado | Reinicia su proceso de red | Nada |
+| **Edge** | Probado | Probado | Reinicia su proceso de red | No uses **Secure Network** (la VPN de Edge) durante las sesiones |
+| **Firefox** | Probado | Probado | Instala una política que apaga su DNS cifrado, su VPN, HTTP/3 y su caché de direcciones. Corta sus conexiones abiertas | Ciérralo y vuelve a abrirlo una vez después de instalar. Para comprobarlo, abre `about:policies` |
+| **Opera** | Sin probar | Sin probar | Reinicia su proceso de red, como en Chrome | Apaga su **VPN** (Ajustes > Privacidad y seguridad). Opera no acepta políticas, así que la app no puede apagarla |
+| **Brave**, **Vivaldi**, **Arc** | Sin probar | Sin probar | Reinicia su proceso de red, como en Chrome | No uses ventanas de Tor ni VPN del navegador |
+
+"Probado" quiere decir que una prueba automática abre el navegador en una Mac y una PC reales, empieza una sesión y comprueba que los sitios bloqueados no cargan, también en pestañas que ya estaban abiertas. Está en [`pruebas/navegadores.py`](pruebas/navegadores.py).
+
+**Por qué importan las VPN del navegador:** Opera, Edge, Firefox y Brave traen VPN o proxys integrados. Con ellos, la dirección del sitio la busca un servidor de afuera, y el archivo `hosts` de tu computadora no participa. Una VPN instalada en el sistema, en cambio, sí respeta el bloqueo.
+
 ## Privacidad
 
 La app no se conecta a internet, no tiene cuentas ni analíticas, y no recopila ni envía datos. Solo guarda en tu computadora tu lista de bloqueos y el estado de la sesión actual. [Ver el detalle](docs/privacidad.md).
@@ -109,9 +126,10 @@ La app no se conecta a internet, no tiene cuentas ni analíticas, y no recopila 
 Es una herramienta para frenar el impulso, no un control parental.
 
 - **Quien tenga la contraseña de administrador puede saltarse el bloqueo**, editando el archivo `hosts`, deteniendo el servicio o cambiando la hora del sistema.
-- **Firefox** trae su propio DNS cifrado (DNS sobre HTTPS), que ignora el archivo `hosts`. El instalador lo apaga con una política del sistema, para que Firefox use el DNS de tu computadora. Si Firefox estaba abierto al instalar, ciérralo y vuelve a abrirlo. Al desinstalar, la política se quita.
-- **Otros navegadores con DNS sobre HTTPS** y un proveedor propio también pueden ignorar el archivo `hosts`. Chrome, Edge, Brave y Safari sí lo respetan.
-- **Pestañas ya abiertas** pueden seguir funcionando un minuto, hasta que el navegador vuelva a consultar la dirección.
+- **VPN y proxys del navegador** se saltan el bloqueo de sitios. Mira [Navegadores](#navegadores).
+- **Al empezar un bloqueo**, una descarga o videollamada en el navegador puede cortarse un instante, porque se reinicia su conexión.
+- **Durante los primeros 3 minutos** se rechazan las direcciones reales de los sitios bloqueados. Si otro sitio comparte servidor con uno bloqueado, como YouTube con Google, puede fallar en esos minutos.
+- **Windows con IPv6:** las conexiones IPv6 que Firefox ya tenía abiertas no se pueden cortar; las nuevas sí se bloquean.
 - **Apps:** se cierran hasta 2 segundos después de abrirse, solo durante un bloqueo activo.
 - **Fuera de las sesiones** nada está bloqueado.
 - **Windows:** Microsoft Defender puede avisar de un cambio en el archivo `hosts`. Es este bloqueo.
@@ -132,8 +150,8 @@ No funciona durante una sesión activa. Borra la app, el servicio y tus listas.
 
 - **El icono muestra un triángulo y "El servicio no responde".** Vuelve a ejecutar el instalador. Reinstalar no borra tus listas ni corta una sesión activa.
 - **Mac: "No se pudo compilar" después de actualizar macOS.** Reinstala las herramientas con `sudo rm -rf /Library/Developer/CommandLineTools && xcode-select --install`.
-- **Un sitio sigue abriendo en Firefox.** Instala la última versión de la app y reinicia Firefox. Para confirmar que la política está activa, abre `about:policies` en Firefox: debe aparecer `DNSOverHTTPS`.
-- **Un sitio sigue abriendo.** Revisa si entras con otro subdominio (`m.`, `web.`) y agrégalo, y revisa el DNS sobre HTTPS del navegador.
+- **Un sitio sigue abriendo en Firefox.** Instala la última versión de la app y reinicia Firefox. Para confirmar que la política está activa, abre `about:policies` en Firefox: deben aparecer `DNSOverHTTPS` y `Preferences`.
+- **Un sitio sigue abriendo.** Revisa si entras con otro subdominio (`m.`, `web.`) y agrégalo, y que el navegador no tenga su VPN encendida.
 - **No puedo iniciar una sesión.** Activa al menos un sitio o una app en **Qué bloquear…**.
 
 Si algo no funciona, [abre un issue](https://github.com/michael-net/enfocate-pe-causa/issues) contando tu sistema y qué pasó.

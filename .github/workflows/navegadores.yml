@@ -43,13 +43,6 @@ jobs:
           $hosts = "$env:WINDIR\System32\drivers\etc\hosts"
           for ($i = 0; $i -lt 30 -and -not (Select-String -Quiet '127.0.0.1 github.com' $hosts); $i++) { Start-Sleep 1 }
           Get-Content $hosts | Select-Object -Last 12
-          Start-Sleep 4
-          netsh advfirewall firewall show rule name="Enfocate pe causa: corte" | Select-String 'RemoteIP|Action'
-          # Diagnóstico temporal: conexiones de Firefox después del corte.
-          Start-Sleep 2
-          $ff = @(Get-Process firefox -ErrorAction SilentlyContinue | ForEach-Object Id)
-          Get-NetTCPConnection -State Established -ErrorAction SilentlyContinue | Where-Object { $ff -contains $_.OwningProcess -and $_.RemotePort -in 80, 443 } |
-            Format-Table LocalAddress, RemoteAddress, RemotePort, OwningProcess -AutoSize | Out-String -Width 200 | Write-Host
           '@ | Set-Content (Join-Path $env:RUNNER_TEMP 'iniciar.ps1')
       - name: Probar Chrome, Edge y Firefox
         shell: powershell
@@ -77,16 +70,6 @@ jobs:
           orden focus60
           for i in $(seq 30); do grep -q '127.0.0.1 github.com' /etc/hosts && break; sleep 1; done
           tail -12 /etc/hosts
-          # Diagnóstico temporal: procesos y conexiones de Safari y Firefox después del corte.
-          sleep 2
-          ps -axo pid,user,comm | grep -i -E 'webkit|safari|firefox' | grep -v grep
-          sleep 8
-          echo "pf:"; sudo pfctl -a com.apple/250.Enfocate -s rules 2>/dev/null; sudo pfctl -s info 2>/dev/null | head -1
-          ls "/Library/Application Support/focus"
-          time dig +short +time=2 +tries=1 wikipedia.org A www.wikipedia.org A wikipedia.org AAAA www.wikipedia.org AAAA
-          ( for t in 5 10 20; do sleep 5; echo "pf despues: $(sudo pfctl -s info 2>/dev/null | head -1)"; sudo pfctl -a com.apple/250.Enfocate -s rules 2>/dev/null | head -2; done ) &
-          lsof -nP -iTCP -sTCP:ESTABLISHED -a -c firefox 2>/dev/null | grep -E '198\.35|208\.80|140\.82' 
-          curl -sS -m 5 -o /dev/null -w 'curl youtube: %{remote_ip} %{http_code}\n' https://www.youtube.com || true
           SH
       - name: Probar Safari, Chrome, Edge y Firefox
         run: python pruebas/navegadores.py "bash $RUNNER_TEMP/iniciar.sh" safari chrome edge firefox
