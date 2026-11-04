@@ -20,7 +20,8 @@ SITIOS = {
     "wikipedia.org": ("https://www.wikipedia.org/", "Wikipedia"),
     "github.com": ("https://github.com/", "GitHub"),
 }
-CHEQUEOS = [5, 30, 70, 130, 250]
+# El bloqueo tarda unos segundos en llegar a las pestañas abiertas; se promete menos de 15.
+CHEQUEOS = [15, 45, 100, 200]
 
 
 def abrir(nombre):

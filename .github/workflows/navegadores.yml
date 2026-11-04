@@ -50,9 +50,6 @@ jobs:
 
   macos:
     runs-on: macos-latest
-    strategy:
-      fail-fast: false
-      matrix: { vez: [1, 2, 3] }
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -73,9 +70,6 @@ jobs:
           orden focus60
           for i in $(seq 30); do grep -q '127.0.0.1 github.com' /etc/hosts && break; sleep 1; done
           tail -12 /etc/hosts
-          # Diagnóstico temporal, en segundo plano para no cambiar los tiempos.
-          F="/Library/Application Support/focus"
-          ( for t in 1 2 3 4 5 6; do echo "[$((t*3))s] ahora $(date +%s) hosts $(stat -f %m /etc/hosts) dir $(stat -f %m "$F/direcciones" 2>/dev/null) lock $(stat -f %m "$F/lock" 2>/dev/null) enforcer $(stat -f %B /usr/local/libexec/focus-enforcer 2>/dev/null) pid $(pgrep -f focus-enforcer | head -1) pfhasta $(cat "$F/pf-hasta" 2>/dev/null) pf: $(sudo pfctl -s info 2>/dev/null | head -1 | cut -c9-16)"; sleep 3; done ) &
           SH
       - name: Probar Safari, Chrome, Edge y Firefox
         run: python pruebas/navegadores.py "bash $RUNNER_TEMP/iniciar.sh" safari chrome edge firefox

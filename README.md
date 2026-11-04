@@ -102,7 +102,7 @@ Más detalle en [Arquitectura](docs/arquitectura.md).
 
 ## Navegadores
 
-Al empezar una sesión, la app también corta las conexiones que el navegador ya tenía abiertas. Sin eso, una pestaña de Instagram abierta seguiría funcionando. Los navegadores reabren su conexión solos, sin cerrar pestañas.
+Al empezar una sesión, la app también corta las conexiones que el navegador ya tenía abiertas. Sin eso, una pestaña de Instagram abierta seguiría funcionando. Los navegadores reabren su conexión solos, sin cerrar pestañas. En menos de 15 segundos, los sitios de tu lista dejan de cargar también en esas pestañas.
 
 | Navegador | Mac | Windows | Qué hace la app | Qué haces tú |
 |---|---|---|---|---|
