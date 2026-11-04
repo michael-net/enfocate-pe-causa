@@ -119,7 +119,7 @@ Al empezar una sesión, la app también corta las conexiones que el navegador ya
 
 ## Privacidad
 
-La app no se conecta a internet, no tiene cuentas ni analíticas, y no recopila ni envía datos. Solo guarda en tu computadora tu lista de bloqueos y el estado de la sesión actual. [Ver el detalle](docs/privacidad.md).
+La app no tiene cuentas ni analíticas, y no recopila ni envía datos. Su única consulta de red es preguntar al DNS de tu computadora la dirección de tus sitios bloqueados al empezar una sesión. Solo guarda en tu computadora tu lista de bloqueos y el estado de la sesión actual. [Ver el detalle](docs/privacidad.md).
 
 ## Limitaciones
 

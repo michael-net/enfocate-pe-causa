@@ -2,7 +2,7 @@
 
 ## Qué datos maneja
 
-La app funciona solo en tu computadora. No se conecta a internet, no tiene cuentas ni analíticas, y no recopila ni envía datos a nadie.
+La app funciona solo en tu computadora. No tiene cuentas ni analíticas, y no recopila ni envía datos a nadie. Su única consulta de red es la dirección de tus sitios bloqueados, al empezar una sesión (ver [Qué permisos usa](#qué-permisos-usa)).
 
 Todo lo que guarda está en tu computadora. En Mac:
 
